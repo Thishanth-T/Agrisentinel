@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+ecdsa
+streamlit
+pandas
+groq
+twilio
+requests
+pydantic
+httpx
