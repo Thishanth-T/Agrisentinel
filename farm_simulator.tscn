@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://spt0mnkd1isi"]
+
+[ext_resource type="Script" uid="uid://t4jyr5s0bv40" path="res://farm_simulator.gd" id="1_sim"]
+
+[node name="FarmSimulator" type="Node2D"]
+script = ExtResource("1_sim")
