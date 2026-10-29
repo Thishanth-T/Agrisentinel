@@ -9,16 +9,8 @@ echo     Enterprise B2B Demo Launcher
 echo  ============================================================
 echo.
 
-:: Navigate to project folder (wherever this .bat file lives)
+:: Navigate to project folder
 cd /d "%~dp0"
-
-:: Set credentials for this execution session
-set "TWILIO_ACCOUNT_SID=AC7b5b6cc7e83c59d0edc54bcf59a4dee1"
-set "TWILIO_AUTH_TOKEN=6af791ff2a26f1c8e69afe984fafcf17"
-set "TWILIO_PHONE_NUMBER=+17372508034"
-set "GROQ_API_KEY=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"
-set "OPENWEATHER_API_KEY=0f5614e650857443251cbb524550aad8"
-set "FARMER_TEST_PHONE=+919363849952"
 
 :: Kill any old instances still running on 8000 / 8501
 echo  [0/4] Cleaning up old processes...

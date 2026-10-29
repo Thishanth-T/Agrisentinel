@@ -1,21 +1,35 @@
+"""
+AgriSentinel Enterprise API Backend
+===================================
+FastAPI ingestion service for cryptographically authenticated on-plot telemetry,
+meteorological cross-examination, parametric claims evaluation, and voice alerts.
+"""
+
 import os
-import sys
 import time
 from typing import Dict, Any, Optional
+
+import config  # Loads .env safely at startup
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from farm_registry import (
+    FARM_PROFILES,
+    DEVICE_REGISTRY,
+    get_registered_device,
+    get_farm_profile
+)
 from crypto_engine import CryptoEngine
 from satellite_verifier import SatelliteVerifier
 from insurance_engine import engine
 from advisor_service import GroqAdvisoryService
-from telecom_service import TelecomVoiceEngine, VOICE_WEBHOOK_URLS
+from telecom_service import TelecomVoiceEngine
 
 app = FastAPI(
     title="AgriSentinel Enterprise API",
-    description="Autonomous Parametric Crop Insurance & Cryptographic Anti-Fraud Ingestion Engine",
-    version="2.0.0",
+    description="Autonomous Parametric Crop Insurance & Hardware-Signed Telemetry Ingestion Platform",
+    version="2.1.0",
     docs_url="/docs",
     redoc_url=None
 )
@@ -31,23 +45,27 @@ app.add_middleware(
 class TelemetryData(BaseModel):
     plot_id: str = Field(..., example="plot_1")
     timestamp: float = Field(default_factory=time.time)
-    temperature: float = Field(..., example=32.5)
+    temperature: float = Field(..., example=28.5)
     humidity: float = Field(default=45.0, example=45.0)
     pressure: float = Field(default=1012.0, example=1012.0)
-    soil_moisture: float = Field(..., example=11.2)
+    soil_moisture: float = Field(..., example=32.0)
     rainfall_mm: float = Field(default=0.0, example=0.0)
 
 class TelemetryPayload(BaseModel):
     node_id: str = Field(..., example="node_1")
-    public_key: str = Field(..., example="04b50c128ff0b1a0f9687e35aa19842f778a4869c9b466184a1d48c0a87a8a25c114e9f7833076ecf258a36021200be649f807be1778c8531ebcd7ff514120ec0e")
-    signature: str = Field(..., example="30440220668b5774b7858c49e29a393d25ce4aa1d1136b3d4f82877a5b3ee28e67da9c5a022026130424fb2f342721ab8dfb776dc6be2e4cfc3822a16d5e1882d41ab02c0b05")
+    plot_id: str = Field(..., example="plot_1")
+    signature: str = Field(..., example="30440220...signature_hex...")
     telemetry: TelemetryData
+
+class SimulatorSignRequest(BaseModel):
+    node_id: str = Field(..., example="node_1")
+    telemetry: Dict[str, Any]
 
 class ManualTriggerPayload(BaseModel):
     plot_id: str
     soil_moisture: float
     temperature: float
-    humidity: float = 40.0
+    humidity: float = 45.0
     pressure: float = 1012.0
     rainfall_mm: float = 0.0
 
@@ -59,83 +77,112 @@ class TriggerVoicePayload(BaseModel):
     twilio_token: Optional[str] = None
     twilio_phone: Optional[str] = None
 
-class CryptoSignRequest(BaseModel):
-    node_id: str = Field(default="node_1")
-    telemetry: Dict[str, Any]
-
 @app.get("/health")
 async def health_check():
     return {
         "status": "operational",
         "system": "AgriSentinel Enterprise Ingestion Platform",
-        "version": "2.0.0",
+        "version": "2.1.0",
         "timestamp": time.time(),
-        "cryptographic_engine": "ECDSA-SECP256k1",
-        "satellite_cross_verifier": "Active",
+        "cryptographic_algorithm": "ECDSA-SECP256k1 (Registered Device Registry)",
+        "weather_corroborator": "Active",
         "tamper_attempts_blocked": engine.tamper_blocked_count,
-        "active_monitored_nodes": len(engine.policies)
+        "monitored_farm_profiles": len(engine.policies)
     }
 
+@app.get("/api/registry")
+async def get_device_registry():
+    """Returns the authoritative trusted hardware device registry."""
+    return {
+        "registered_devices": list(DEVICE_REGISTRY.values()),
+        "total_count": len(DEVICE_REGISTRY)
+    }
+
+@app.post("/api/simulator/sign")
 @app.post("/api/crypto/sign")
-async def sign_telemetry_packet(payload: CryptoSignRequest):
-    sk, vk = CryptoEngine.get_or_create_node_keypair(payload.node_id)
-    signed_packet = CryptoEngine.create_signed_packet(payload.node_id, sk, vk, payload.telemetry)
-    return signed_packet
+async def sign_simulator_telemetry(payload: SimulatorSignRequest):
+    """
+    SIMULATOR HELPER ENDPOINT:
+    Uses provisioned test private keys strictly for software simulation.
+    In real deployments, private keys reside exclusively inside ESP32 eFuse.
+    """
+    try:
+        signed_pkt = CryptoEngine.create_simulated_signed_packet(payload.node_id, payload.telemetry)
+        return signed_pkt
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/api/telemetry")
 async def ingest_telemetry(payload: TelemetryPayload, background_tasks: BackgroundTasks, request: Request):
+    """
+    Primary Ingestion Gateway:
+    1. Verifies ECDSA signature against the device's REGISTERED public key in DEVICE_REGISTRY.
+    2. Validates timestamp freshness, monotonic sequence, and prevents replay attacks.
+    3. Cross-examines ground readings against independent meteorological observations.
+    4. Evaluates parametric insurance policy and generates Claim Intent if breached.
+    """
     telemetry_dict = payload.telemetry.model_dump()
-    sig_valid, sig_notes = CryptoEngine.verify_payload(
-        public_key_hex=payload.public_key,
-        data=telemetry_dict,
+    
+    # 1. Cryptographic & Device Trust Verification
+    sig_valid, sig_notes, crypto_metadata = CryptoEngine.verify_telemetry_packet(
+        node_id=payload.node_id,
+        claimed_plot_id=payload.plot_id,
         signature_hex=payload.signature,
-        check_freshness=False
+        telemetry_dict=telemetry_dict,
+        enforce_freshness=True
     )
 
-    result = engine.evaluate_telemetry(
+    # 2. Insurance Engine Evaluation
+    eval_result = engine.evaluate_telemetry(
         node_id=payload.node_id,
         telemetry=telemetry_dict,
         sig_valid=sig_valid,
+        crypto_metadata=crypto_metadata,
         sig_notes=sig_notes
     )
 
+    # If cryptographic verification failed, reject with HTTP 403 Forbidden
     if not sig_valid:
         raise HTTPException(
             status_code=403,
             detail={
-                "error": "FORBIDDEN_CRYPTOGRAPHIC_TAMPER_DETECTED",
+                "error": "FORBIDDEN_DATA_TRUST_FAILURE",
+                "failure_stage": crypto_metadata.get("failure_stage"),
                 "message": sig_notes,
                 "node_id": payload.node_id,
-                "curve": "SECP256k1"
+                "claimed_plot_id": payload.plot_id,
+                "crypto_metadata": crypto_metadata
             }
         )
 
-    if result.get("status") == "HELD_PHYSICAL_TAMPERING_AUDIT":
+    # If held for physical divergence / tamper inspection
+    if eval_result.get("status") == "HELD_PHYSICAL_DIVERGENCE_AUDIT":
         return {
-            "status": "HELD_FOR_AUDIT",
-            "cryptographic_verification": "SECP256k1_VALID",
-            "satellite_cross_check": "TAMPER_AUDIT_REQUIRED",
-            "evaluation": result
+            "status": "HELD_FOR_FIELD_INSPECTION",
+            "cryptographic_verification": "SECP256k1_REGISTERED_DEVICE_VALID",
+            "weather_corroboration": "DIVERGENCE_FLAGGED",
+            "evaluation": eval_result
         }
 
-    if result.get("triggered"):
+    # If parametric claim intent was generated, dispatch voice advisory call
+    if eval_result.get("triggered"):
         base_url = str(request.base_url).rstrip("/")
-        lang_code = result.get("language_code", "en-IN")
+        lang_code = eval_result.get("language_code", "ta-IN")
         background_tasks.add_task(
             TelecomVoiceEngine.dispatch_voice_alert,
-            result["farmer_phone"],
-            payload.telemetry.plot_id,
-            result["moisture"],
-            result["payout_amount"],
+            eval_result["farmer_phone"],
+            payload.plot_id,
+            eval_result["moisture"],
+            eval_result["payout_amount"],
             base_url,
             lang_code
         )
 
     return {
         "status": "success",
-        "cryptographic_verification": "SECP256k1_VALID",
-        "satellite_cross_check": result.get("satellite_verification", {}).get("status", "SATELLITE_VERIFIED"),
-        "evaluation": result
+        "cryptographic_verification": "SECP256k1_REGISTERED_DEVICE_VALID",
+        "weather_corroboration": eval_result.get("weather_corroboration", {}).get("badge", "WEATHER: CORROBORATED"),
+        "evaluation": eval_result
     }
 
 @app.get("/api/advisory/{plot_id}")
@@ -145,8 +192,8 @@ async def get_advisory(plot_id: str, month: str = ""):
         raise HTTPException(status_code=404, detail="Farm plot not found in policy registry")
 
     telemetry = engine.plot_telemetry.get(plot_id, {})
-    moisture = telemetry.get("soil_moisture", 14.5)
-    temp = telemetry.get("temperature", 38.0)
+    moisture = telemetry.get("soil_moisture", 30.0)
+    temp = telemetry.get("temperature", 28.5)
     rain = telemetry.get("rainfall_mm", 0.0)
 
     advisory = await GroqAdvisoryService.get_agronomic_advisory(
@@ -169,10 +216,10 @@ async def trigger_voice_call(payload: TriggerVoicePayload, request: Request):
         raise HTTPException(status_code=404, detail=f"Plot {payload.plot_id} not registered")
 
     telemetry = engine.plot_telemetry.get(payload.plot_id, {})
-    moisture = telemetry.get("soil_moisture", 11.5)
-    amount = policy.get("sum_insured", 50000.0)
+    moisture = telemetry.get("soil_moisture", 14.0)
+    amount = policy.get("sum_insured_inr", 50000.0)
     base_url = str(request.base_url).rstrip("/")
-    lang_code = policy.get("language_code", "en-IN")
+    lang_code = policy.get("language_code", "ta-IN")
 
     dispatch_res = await TelecomVoiceEngine.dispatch_voice_alert(
         to_phone=payload.phone_number,
@@ -188,11 +235,11 @@ async def trigger_voice_call(payload: TriggerVoicePayload, request: Request):
     )
     return dispatch_res
 
-@app.get("/api/twilio/voice", operation_id="twilio_voice_get_v2")
-@app.post("/api/twilio/voice", operation_id="twilio_voice_post_v2")
+@app.get("/api/twilio/voice")
+@app.post("/api/twilio/voice")
 async def twilio_voice_webhook(plot_id: str = "plot_1", moisture: float = 14.0, amount: float = 50000.0):
     policy = engine.policies.get(plot_id, {})
-    lang = policy.get("language_code", "en-IN")
+    lang = policy.get("language_code", "ta-IN")
     twiml_content = TelecomVoiceEngine.generate_breach_twiml(plot_id, moisture, amount, lang)
     return Response(content=twiml_content, media_type="application/xml")
 
@@ -203,22 +250,6 @@ async def twilio_gather_webhook(request: Request):
     twiml_content = TelecomVoiceEngine.generate_gather_response(str(digits))
     return Response(content=twiml_content, media_type="application/xml")
 
-@app.post("/api/twilio/call")
-async def trigger_legacy_call(payload: Dict[str, Any], request: Request):
-    phone = payload.get("phone", "+15550101")
-    plot_id = payload.get("plot_id", "plot_1")
-    moisture = float(payload.get("moisture", 12.0))
-    amount = float(payload.get("amount", 50000.0))
-    custom_url = payload.get("voice_url")
-    policy = engine.policies.get(plot_id, {})
-    lang_code = policy.get("language_code", "en-IN")
-    base_url = str(request.base_url).rstrip("/")
-
-    dispatch_result = await TelecomVoiceEngine.dispatch_voice_alert(
-        phone, plot_id, moisture, amount, base_url, lang_code, custom_url
-    )
-    return dispatch_result
-
 @app.get("/api/grid")
 async def get_grid_state():
     grid = []
@@ -226,29 +257,28 @@ async def get_grid_state():
         telemetry = engine.plot_telemetry.get(pid, {})
         grid.append({
             "plot_id": pid,
-            "grid_x": policy["grid_x"],
-            "grid_y": policy["grid_y"],
+            "node_id": policy["node_id"],
             "farmer_name": policy["farmer_name"],
             "phone": policy["phone"],
             "crop": policy["crop"],
             "state": policy["state"],
-            "region": policy.get("region", ""),
+            "district": policy["district"],
+            "region": policy["region"],
             "language_code": policy["language_code"],
             "language_name": policy["language_name"],
-            "sum_insured": policy["sum_insured"],
-            "moisture_threshold": policy["moisture_threshold"],
-            "temp_threshold": policy["temp_threshold"],
-            "flood_moisture_threshold": policy.get("flood_moisture_threshold", 88.0),
+            "sum_insured_inr": policy["sum_insured_inr"],
+            "moisture_drought_threshold": policy["moisture_drought_threshold"],
+            "temp_heatwave_threshold": policy["temp_heatwave_threshold"],
+            "rainfall_flood_threshold_mm": policy["rainfall_flood_threshold_mm"],
             "active": policy["active"],
             "soil_moisture": telemetry.get("soil_moisture", 30.0),
-            "temperature": telemetry.get("temperature", 28.0),
+            "temperature": telemetry.get("temperature", 28.5),
             "humidity": telemetry.get("humidity", 45.0),
             "pressure": telemetry.get("pressure", 1012.0),
             "rainfall_mm": telemetry.get("rainfall_mm", 0.0),
             "status": telemetry.get("status", "NORMAL"),
-            "crypto_status": telemetry.get("crypto_status", "SECP256k1: VALID"),
-            "satellite_status": telemetry.get("satellite_status", "SATELLITE: MATCHED"),
-            "satellite_data": telemetry.get("satellite_data", {})
+            "crypto_status": telemetry.get("crypto_status", "SECP256k1: PENDING"),
+            "weather_status": telemetry.get("weather_corroboration_status", "WEATHER: CORROBORATED")
         })
     return {
         "grid": grid,
@@ -257,32 +287,30 @@ async def get_grid_state():
 
 @app.get("/api/basis-risk-comparison")
 async def get_basis_risk_comparison():
-    sat_macro = SatelliteVerifier.fetch_macro_satellite_data("plot_1")
+    ref_weather = SatelliteVerifier.fetch_reference_weather("plot_1")
     return {
-        "pmfby_traditional_station": {
-            "name": "District Weather Station (IMD)",
+        "traditional_pmfby_station": {
+            "name": "District IMD Weather Station",
             "distance_from_farm_km": 15.2,
-            "recorded_temperature_c": 28.5,
-            "recorded_rainfall_24h_mm": 12.0,
-            "recorded_relative_humidity": 68.0,
-            "macro_status": "NORMAL / NO EXTREME EVENT",
-            "payout_status": "CLAIM REJECTED (0 Payout)",
-            "basis_risk_failure_explanation": (
-                "District station 15 km away recorded light showers. Traditional PMFBY policy "
-                "failed to detect localized root-zone drought on the farmer's plot, leaving the farmer uncompensated."
+            "recorded_temperature_c": ref_weather.get("temperature_c", 28.5),
+            "recorded_rainfall_1h_mm": ref_weather.get("rain_1h_mm", 0.0),
+            "station_status": "NORMAL / NO EXTREME MACRO EVENT",
+            "claim_decision": "CLAIM REJECTED (0 Payout)",
+            "basis_risk_explanation": (
+                "District station 15 km away recorded light or zero rain and nominal temperatures. "
+                "Traditional PMFBY area-approach failed to detect localized root-zone crop stress on the farmer's plot."
             )
         },
         "agrisentinel_hyperlocal_node": {
-            "name": "AgriSentinel Fence Node #1",
-            "grid_resolution": "50x50m micro-polygon",
-            "on_farm_temperature_c": 43.8,
-            "on_farm_soil_moisture_pct": 11.5,
-            "drought_threshold_pct": 18.0,
-            "crypto_signature_status": "ECDSA-SECP256k1 VALID",
-            "satellite_cross_check": "SATELLITE VERIFIED (Thermal anomaly matches)",
-            "payout_status": "INSTANT AUTOMATED PAYOUT (Rs. 50,000 DISBURSED)",
-            "latency_seconds": 1.4,
-            "voice_alert_dispatch": "Tamil Voice Call Dispatched to Farmer Mobile"
+            "name": "AgriSentinel Edge Node #1 (Plot 1)",
+            "on_farm_soil_moisture_pct": 11.2,
+            "on_farm_temperature_c": 42.1,
+            "contractual_drought_threshold": 18.0,
+            "crypto_verification": "ECDSA SECP256k1 Registered Key Verified",
+            "weather_corroboration": "Corroborated with dry atmospheric conditions",
+            "simulated_claim_status": "CLAIM INTENT GENERATED (₹50,000 Benefit Calculated)",
+            "settlement_integration": "DISBURSEMENT_NOT_CONNECTED (Requires Underwriter Core Banking)",
+            "voice_dispatch": "Tamil Audio Advisory Queued for Farmer Mobile"
         }
     }
 
@@ -295,7 +323,8 @@ async def get_claims():
     return {
         "claims": engine.claims,
         "total_claims_count": len(engine.claims),
-        "total_disbursed_inr": sum(c.get("payout_amount", 0) for c in engine.claims)
+        "total_benefit_calculated_inr": sum(c.get("payout_calculated_inr", 0) for c in engine.claims),
+        "notice": "All claims are simulated Claim Intent records under parametric micro-rider terms."
     }
 
 @app.get("/api/audit")
@@ -306,22 +335,19 @@ async def get_audit_log():
     }
 
 @app.post("/api/policies/reset")
-async def reset_policies():
-    for pid in engine.policies:
-        engine.policies[pid]["active"] = True
-        engine.plot_telemetry[pid]["status"] = "NORMAL"
-        engine.plot_telemetry[pid]["soil_moisture"] = 32.0
-        engine.plot_telemetry[pid]["temperature"] = 28.5
-        engine.plot_telemetry[pid]["rainfall_mm"] = 0.0
-        engine.plot_telemetry[pid]["crypto_status"] = "SECP256k1: PENDING"
-        engine.plot_telemetry[pid]["satellite_status"] = "SATELLITE: SYNCHRONIZED"
-    engine.claims.clear()
-    engine.audit_log.clear()
-    engine.tamper_blocked_count = 0
-    return {"status": "reset_successful"}
+async def reset_demo_state():
+    """Predictable demo reset: clears audit log, claims, and resets replay protection."""
+    CryptoEngine.reset_replay_cache()
+    res = engine.reset_system()
+    return res
 
 @app.post("/api/manual-trigger")
 async def manual_trigger(payload: ManualTriggerPayload, background_tasks: BackgroundTasks, request: Request):
+    """
+    Simulation test override from dashboard/Godot.
+    Constructs a valid test packet signed with the simulator's test key.
+    """
+    node_id = get_farm_profile(payload.plot_id)["assigned_node_id"]
     telemetry_dict = {
         "plot_id": payload.plot_id,
         "soil_moisture": payload.soil_moisture,
@@ -332,20 +358,37 @@ async def manual_trigger(payload: ManualTriggerPayload, background_tasks: Backgr
         "timestamp": time.time()
     }
 
-    result = engine.evaluate_telemetry("manual_override", telemetry_dict, sig_valid=True, sig_notes="Manual override trigger via dashboard")
-    if result.get("triggered"):
+    # Sign using simulator test key
+    signed_pkt = CryptoEngine.create_simulated_signed_packet(node_id, telemetry_dict)
+
+    # Ingest through primary verification pipeline
+    sig_valid, sig_notes, crypto_metadata = CryptoEngine.verify_telemetry_packet(
+        node_id=node_id,
+        claimed_plot_id=payload.plot_id,
+        signature_hex=signed_pkt["signature"],
+        telemetry_dict=telemetry_dict,
+        enforce_freshness=False
+    )
+
+    eval_result = engine.evaluate_telemetry(
+        node_id=node_id,
+        telemetry=telemetry_dict,
+        sig_valid=sig_valid,
+        crypto_metadata=crypto_metadata,
+        sig_notes=sig_notes
+    )
+
+    if eval_result.get("triggered"):
         base_url = str(request.base_url).rstrip("/")
-        lang_code = result.get("language_code", "en-IN")
+        lang_code = eval_result.get("language_code", "ta-IN")
         background_tasks.add_task(
             TelecomVoiceEngine.dispatch_voice_alert,
-            result["farmer_phone"],
+            eval_result["farmer_phone"],
             payload.plot_id,
-            result["moisture"],
-            result["payout_amount"],
+            eval_result["moisture"],
+            eval_result["payout_amount"],
             base_url,
             lang_code
         )
-    return {"status": "processed", "evaluation": result}
 
-if __name__ == "__main__":
-    uvicorn.run("backend:app", host="0.0.0.0", port=8000, reload=True, workers=1)
+    return {"status": "processed", "evaluation": eval_result}

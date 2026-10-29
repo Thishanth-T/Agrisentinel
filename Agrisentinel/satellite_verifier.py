@@ -1,233 +1,206 @@
+"""
+AgriSentinel Meteorological & Ground Corroboration Engine
+=========================================================
+Cross-references on-plot IoT sensor telemetry against independent external
+meteorological data (OpenWeatherMap API) or calibrated regional baselines.
+
+TRANSPARENCY NOTE:
+This module uses meteorological station & atmospheric observation APIs to
+detect macro-level weather conditions. It does NOT claim to process raw SAR
+satellite imagery. Offline baselines are explicitly labeled as synthetic.
+"""
+
 import os
 import time
 import requests
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional
 
-FARM_POLYGONS: Dict[str, Dict[str, Any]] = {
-    "plot_1": {
-        "region": "Thanjavur-Madurai Delta",
-        "state": "Tamil Nadu",
-        "lat": 10.7870,
-        "lon": 79.1378,
-        "satellite_source": "Copernicus Sentinel-2 & NASA POWER",
-        "baseline_temp": 32.5,
-        "baseline_cloud": 12.0,
-        "baseline_rain_24h": 0.0,
-        "baseline_pressure": 1011.5
-    },
-    "plot_2": {
-        "region": "Gangetic Plain, Varanasi",
-        "state": "Uttar Pradesh",
-        "lat": 25.3176,
-        "lon": 82.9739,
-        "satellite_source": "Copernicus Sentinel-2 & NASA POWER",
-        "baseline_temp": 30.0,
-        "baseline_cloud": 15.0,
-        "baseline_rain_24h": 0.0,
-        "baseline_pressure": 1012.0
-    },
-    "plot_3": {
-        "region": "Saurashtra Cotton Belt, Anand",
-        "state": "Gujarat",
-        "lat": 22.5645,
-        "lon": 72.9289,
-        "satellite_source": "Copernicus Sentinel-2 & NASA POWER",
-        "baseline_temp": 33.0,
-        "baseline_cloud": 8.0,
-        "baseline_rain_24h": 0.0,
-        "baseline_pressure": 1010.5
-    },
-    "plot_4": {
-        "region": "Krishna River Basin, Guntur",
-        "state": "Andhra Pradesh",
-        "lat": 16.3067,
-        "lon": 80.4365,
-        "satellite_source": "Copernicus Sentinel-2 & NASA POWER",
-        "baseline_temp": 34.0,
-        "baseline_cloud": 10.0,
-        "baseline_rain_24h": 0.0,
-        "baseline_pressure": 1011.0
-    },
-    "plot_5": {
-        "region": "Lower Gangetic Delta, Burdwan",
-        "state": "West Bengal",
-        "lat": 23.2324,
-        "lon": 87.8615,
-        "satellite_source": "Copernicus Sentinel-2 & NASA POWER",
-        "baseline_temp": 29.5,
-        "baseline_cloud": 20.0,
-        "baseline_rain_24h": 0.0,
-        "baseline_pressure": 1013.0
-    },
-    "plot_6": {
-        "region": "Chambal Arid Belt, Kota",
-        "state": "Rajasthan",
-        "lat": 25.2138,
-        "lon": 75.8648,
-        "satellite_source": "Copernicus Sentinel-2 & NASA POWER",
-        "baseline_temp": 36.5,
-        "baseline_cloud": 5.0,
-        "baseline_rain_24h": 0.0,
-        "baseline_pressure": 1009.0
-    },
-    "plot_7": {
-        "region": "Deccan Plateau, Nashik",
-        "state": "Maharashtra",
-        "lat": 19.9975,
-        "lon": 73.7898,
-        "satellite_source": "Copernicus Sentinel-2 & NASA POWER",
-        "baseline_temp": 31.0,
-        "baseline_cloud": 10.0,
-        "baseline_rain_24h": 0.0,
-        "baseline_pressure": 1012.0
-    },
-    "plot_8": {
-        "region": "Kuttanad Wet Basin, Alappuzha",
-        "state": "Kerala",
-        "lat": 9.4981,
-        "lon": 76.3388,
-        "satellite_source": "Copernicus Sentinel-2 & NASA POWER",
-        "baseline_temp": 28.5,
-        "baseline_cloud": 35.0,
-        "baseline_rain_24h": 2.5,
-        "baseline_pressure": 1012.5
-    },
-    "plot_9": {
-        "region": "Tungabhadra Basin, Raichur",
-        "state": "Karnataka",
-        "lat": 16.2076,
-        "lon": 77.3463,
-        "satellite_source": "Copernicus Sentinel-2 & NASA POWER",
-        "baseline_temp": 33.5,
-        "baseline_cloud": 12.0,
-        "baseline_rain_24h": 0.0,
-        "baseline_pressure": 1011.0
-    }
-}
+from farm_registry import FARM_PROFILES, get_farm_profile
 
 class SatelliteVerifier:
     @classmethod
-    def fetch_macro_satellite_data(cls, plot_id: str) -> Dict[str, Any]:
-        polygon = FARM_POLYGONS.get(plot_id, FARM_POLYGONS["plot_1"])
-        api_key = os.getenv("OPENWEATHER_API_KEY") or os.getenv("WEATHER_API_KEY")
+    def fetch_reference_weather(cls, plot_id: str) -> Dict[str, Any]:
+        """
+        Retrieves reference weather for the plot's coordinates.
+        Uses live OpenWeatherMap API if OPENWEATHER_API_KEY is configured.
+        Falls back to documented regional baseline if unavailable.
+        """
+        farm = get_farm_profile(plot_id) or FARM_PROFILES["plot_1"]
+        lat = farm["lat"]
+        lon = farm["lon"]
+        api_key = os.getenv("OPENWEATHER_API_KEY")
 
-        if api_key:
+        if api_key and not api_key.startswith("mock") and len(api_key) > 10:
             try:
-                url = f"https://api.openweathermap.org/data/2.5/weather?lat={polygon['lat']}&lon={polygon['lon']}&appid={api_key}&units=metric"
-                res = requests.get(url, timeout=4)
+                url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric"
+                res = requests.get(url, timeout=3.5)
                 if res.status_code == 200:
                     d = res.json()
-                    rain = d.get("rain", {}).get("1h", 0.0) * 24.0
+                    main = d.get("main", {})
+                    clouds = d.get("clouds", {})
+                    rain_data = d.get("rain", {})
+                    
+                    # Strictly reporting actual measured windows — NEVER multiplying 1h by 24!
+                    rain_1h = float(rain_data.get("1h", 0.0))
+                    rain_3h = float(rain_data.get("3h", 0.0))
+                    
                     return {
-                        "source": "OpenWeatherMap Live Satellite Feed",
-                        "region": polygon["region"],
-                        "state": polygon["state"],
-                        "lat": polygon["lat"],
-                        "lon": polygon["lon"],
-                        "temperature": float(d.get("main", {}).get("temp", polygon["baseline_temp"])),
-                        "humidity": float(d.get("main", {}).get("humidity", 40.0)),
-                        "pressure": float(d.get("main", {}).get("pressure", polygon["baseline_pressure"])),
-                        "cloud_cover": float(d.get("clouds", {}).get("all", polygon["baseline_cloud"])),
-                        "rain_24h_mm": float(rain),
-                        "timestamp": time.time(),
-                        "is_live_api": True
+                        "source_name": "OpenWeatherMap Meteorological Observation Grid",
+                        "data_type": "LIVE_EXTERNAL_API",
+                        "is_live": True,
+                        "lat": lat,
+                        "lon": lon,
+                        "region": f"{farm['district']}, {farm['state']}",
+                        "temperature_c": float(main.get("temp", farm["baseline_temp"])),
+                        "humidity_pct": float(main.get("humidity", 45.0)),
+                        "pressure_hpa": float(main.get("pressure", 1012.0)),
+                        "cloud_cover_pct": float(clouds.get("all", 15.0)),
+                        "rain_1h_mm": rain_1h,
+                        "rain_3h_mm": rain_3h,
+                        "timestamp": time.time()
                     }
             except Exception:
+                # Network failure or timeout: graceful fallback to baseline
                 pass
 
+        # Offline / Unconfigured fallback
         return {
-            "source": f"{polygon['satellite_source']} (Macro Simulation)",
-            "region": polygon["region"],
-            "state": polygon["state"],
-            "lat": polygon["lat"],
-            "lon": polygon["lon"],
-            "temperature": polygon["baseline_temp"],
-            "humidity": 38.0,
-            "pressure": polygon["baseline_pressure"],
-            "cloud_cover": polygon["baseline_cloud"],
-            "rain_24h_mm": polygon["baseline_rain_24h"],
-            "timestamp": time.time(),
-            "is_live_api": False
+            "source_name": "Agro-Climatic Regional Baseline (Offline Demonstration)",
+            "data_type": "SYNTHETIC_BASELINE",
+            "is_live": False,
+            "lat": lat,
+            "lon": lon,
+            "region": f"{farm['district']}, {farm['state']}",
+            "temperature_c": farm["baseline_temp"],
+            "humidity_pct": 45.0,
+            "pressure_hpa": 1012.0,
+            "cloud_cover_pct": 20.0,
+            "rain_1h_mm": 0.0,
+            "rain_3h_mm": 0.0,
+            "timestamp": time.time()
         }
 
     @classmethod
     def verify_telemetry(cls, plot_id: str, telemetry: Dict[str, Any]) -> Dict[str, Any]:
-        sat_data = cls.fetch_macro_satellite_data(plot_id)
+        """
+        Cross-examines node readings against independent reference weather.
+        Returns explicit corroboration status, physical divergence metrics,
+        and human-auditable agronomic notes.
+        """
+        ref = cls.fetch_reference_weather(plot_id)
         node_moisture = float(telemetry.get("soil_moisture", 30.0))
         node_temp = float(telemetry.get("temperature", 28.0))
-        node_pressure = float(telemetry.get("pressure", 1012.0))
-        sat_rain = sat_data["rain_24h_mm"]
-        sat_cloud = sat_data["cloud_cover"]
-        sat_temp = sat_data["temperature"]
+        node_rain = float(telemetry.get("rainfall_mm", 0.0))
+        
+        ref_temp = ref["temperature_c"]
+        ref_rain = ref["rain_1h_mm"]
+        ref_cloud = ref["cloud_cover_pct"]
+        temp_delta = abs(node_temp - ref_temp)
 
-        if node_moisture >= 85.0 and sat_cloud <= 15.0 and sat_rain <= 1.0:
+        # 1. Suspicious Bucket-Immersion Divergence:
+        # Soil sensor reports saturated flood (>85%) while external station reports 0 rain and clear skies (<20% cloud)
+        if node_moisture >= 85.0 and ref_cloud <= 20.0 and ref_rain <= 1.0 and node_rain <= 2.0:
             return {
-                "status": "PHYSICAL_TAMPERING_AUDIT_REQUIRED",
-                "badge": "TAMPER AUDIT REQUIRED",
-                "is_verified": False,
-                "confidence_score": 0.96,
-                "satellite_source": sat_data["source"],
-                "macro_satellite": sat_data,
-                "anomaly_type": "SENSOR_IMMERSION_FRAUD",
+                "corroboration_status": "DIVERGENCE_HELD_FOR_INSPECTION",
+                "badge": "AUDIT: DIVERGENCE FLAGGED",
+                "is_corroborated": False,
+                "anomaly_type": "UNVERIFIED_WATERLOGGING_ANOMALY",
+                "divergence_metrics": {
+                    "node_moisture_pct": node_moisture,
+                    "reference_rain_1h_mm": ref_rain,
+                    "reference_cloud_pct": ref_cloud,
+                    "temp_delta_c": round(temp_delta, 1)
+                },
+                "reference_data": ref,
                 "audit_notes": (
-                    f"Physical Tampering Detected on {plot_id.upper()}: Micro-node reports near-saturation "
-                    f"soil moisture ({node_moisture:.1f}%), but satellite synthetic aperture radar (SAR) confirms "
-                    f"zero regional rainfall ({sat_rain:.1f}mm) and clear sky ({sat_cloud:.1f}% cloud cover). "
-                    "Suspected artificial water soaking. Payout blocked pending field audit."
+                    f"Physical Divergence on Plot {plot_id.upper()}: Micro-node reports root-zone saturation "
+                    f"({node_moisture:.1f}% moisture), but reference weather grid indicates zero rain ({ref_rain:.1f}mm) "
+                    f"and clear sky ({ref_cloud:.0f}% clouds). Claim intent held pending field inspector survey."
                 )
             }
 
-        if node_temp >= 52.0 and (node_temp - sat_temp) > 16.0:
+        # 2. Suspicious Artificial Heat Spike:
+        # Node reports extreme temperature (>50°C) diverging by >15°C from reference station
+        if node_temp >= 50.0 and (node_temp - ref_temp) > 15.0:
             return {
-                "status": "PHYSICAL_TAMPERING_AUDIT_REQUIRED",
-                "badge": "TAMPER AUDIT REQUIRED",
-                "is_verified": False,
-                "confidence_score": 0.94,
-                "satellite_source": sat_data["source"],
-                "macro_satellite": sat_data,
-                "anomaly_type": "ARTIFICIAL_HEAT_FRAUD",
+                "corroboration_status": "DIVERGENCE_HELD_FOR_INSPECTION",
+                "badge": "AUDIT: DIVERGENCE FLAGGED",
+                "is_corroborated": False,
+                "anomaly_type": "UNVERIFIED_THERMAL_ANOMALY",
+                "divergence_metrics": {
+                    "node_temp_c": node_temp,
+                    "reference_temp_c": ref_temp,
+                    "temp_delta_c": round(temp_delta, 1)
+                },
+                "reference_data": ref,
                 "audit_notes": (
-                    f"Heat Tampering Detected on {plot_id.upper()}: Micro-node reports extreme temperature "
-                    f"({node_temp:.1f}C), exceeding regional satellite surface thermal readings ({sat_temp:.1f}C) "
-                    "by >16C without macro-climatic heatwave conditions. Suspected sensor heating. Claim frozen."
+                    f"Thermal Divergence on Plot {plot_id.upper()}: Micro-node reports extreme temperature ({node_temp:.1f}°C) "
+                    f"exceeding reference station ({ref_temp:.1f}°C) by {temp_delta:.1f}°C. Held for physical sensor check."
                 )
             }
 
-        if node_moisture < 18.0 and sat_rain <= 3.0 and sat_cloud <= 35.0:
+        # 3. Corroborated Drought:
+        # Node reports low moisture (<18%) with low precipitation in reference data
+        if node_moisture < 18.0 and ref_rain <= 5.0:
             return {
-                "status": "SATELLITE_VERIFIED",
-                "badge": "SATELLITE: MATCHED",
-                "is_verified": True,
-                "confidence_score": 0.98,
-                "satellite_source": sat_data["source"],
-                "macro_satellite": sat_data,
-                "anomaly_type": "CORROBORATED_DROUGHT",
+                "corroboration_status": "CORROBORATED",
+                "badge": "WEATHER: CORROBORATED",
+                "is_corroborated": True,
+                "anomaly_type": "CORROBORATED_DROUGHT_STRESS",
+                "divergence_metrics": {
+                    "node_moisture_pct": node_moisture,
+                    "reference_temp_c": ref_temp,
+                    "reference_rain_1h_mm": ref_rain,
+                    "temp_delta_c": round(temp_delta, 1)
+                },
+                "reference_data": ref,
                 "audit_notes": (
-                    f"Satellite Corroboration Confirmed: Node drought telemetry ({node_moisture:.1f}% moisture) "
-                    f"matches macro satellite drought signature in {sat_data['region']} (24h rain: {sat_rain:.1f}mm, "
-                    f"cloud cover: {sat_cloud:.1f}%, solar irradiance nominal)."
+                    f"Weather Corroboration Confirmed: Node moisture depletion ({node_moisture:.1f}%) aligns with "
+                    f"dry atmospheric conditions in {ref['region']} (Rain: {ref_rain:.1f}mm, Temp: {ref_temp:.1f}°C)."
                 )
             }
 
+        # 4. Corroborated Deluge / Heavy Precipitation:
+        if node_rain >= 50.0 or (node_moisture >= 80.0 and (ref_rain > 5.0 or ref_cloud > 60.0)):
+            return {
+                "corroboration_status": "CORROBORATED",
+                "badge": "WEATHER: CORROBORATED",
+                "is_corroborated": True,
+                "anomaly_type": "CORROBORATED_HEAVY_PRECIPITATION",
+                "divergence_metrics": {
+                    "node_rain_mm": node_rain,
+                    "node_moisture_pct": node_moisture,
+                    "reference_rain_1h_mm": ref_rain,
+                    "temp_delta_c": round(temp_delta, 1)
+                },
+                "reference_data": ref,
+                "audit_notes": (
+                    f"Weather Corroboration Confirmed: On-plot rainfall ({node_rain:.1f}mm) and soil moisture ({node_moisture:.1f}%) "
+                    f"corroborated by regional cloud cover ({ref_cloud:.0f}%) and atmospheric precipitation indicators."
+                )
+            }
+
+        # 5. Nominal Conditions:
         return {
-            "status": "SATELLITE_VERIFIED",
-            "badge": "SATELLITE: MATCHED",
-            "is_verified": True,
-            "confidence_score": 0.95,
-            "satellite_source": sat_data["source"],
-            "macro_satellite": sat_data,
-            "anomaly_type": "NOMINAL_EQUILIBRIUM",
+            "corroboration_status": "CORROBORATED",
+            "badge": "WEATHER: CORROBORATED",
+            "is_corroborated": True,
+            "anomaly_type": "NOMINAL_CONDITIONS",
+            "divergence_metrics": {
+                "node_temp_c": node_temp,
+                "reference_temp_c": ref_temp,
+                "temp_delta_c": round(temp_delta, 1)
+            },
+            "reference_data": ref,
             "audit_notes": (
-                f"Equilibrium verified: Node readings ({node_temp:.1f}C, {node_moisture:.1f}% moisture) "
-                f"correlate with regional satellite observations for {sat_data['region']}."
+                f"Nominal: Sensor readings ({node_temp:.1f}°C, {node_moisture:.1f}% moisture) correlate with "
+                f"regional weather observations for {ref['region']}."
             )
         }
 
+    # Backward compatibility
     @classmethod
-    def detect_physical_tampering(cls, telemetry: Dict[str, Any], sat_data: Dict[str, Any]) -> Tuple[bool, str, str]:
-        plot_id = telemetry.get("plot_id", "plot_1")
-        res = cls.verify_telemetry(plot_id, telemetry)
-        is_tamper = (res["status"] == "PHYSICAL_TAMPERING_AUDIT_REQUIRED")
-        return is_tamper, res["status"], res["audit_notes"]
+    def fetch_macro_satellite_data(cls, plot_id: str) -> Dict[str, Any]:
+        return cls.fetch_reference_weather(plot_id)
 
 verify_satellite_telemetry = SatelliteVerifier.verify_telemetry

@@ -1,3 +1,14 @@
+"""
+AgriSentinel Insurer Operations Cockpit & Anti-Fraud Dashboard
+============================================================
+Streamlit dashboard for insurance underwriters and hackathon judges to inspect:
+1. 9 Regional Indian Farm Profiles & Live Micro-Climate Telemetry
+2. Basis Risk Comparative Analysis (Area Weather Station vs On-Plot Node)
+3. Cryptographic Data-Trust & Replay Defense Verification
+4. Simulated Claims Ledger & Tamper-Evident Audit Trail
+5. Underwriter ROI & Statutory Late-Penalty Savings Calculator
+"""
+
 import os
 import streamlit as st
 import pandas as pd
@@ -5,23 +16,17 @@ import requests
 import time
 import json
 from datetime import datetime
-from crypto_engine import CryptoEngine
+
+import config  # Loads .env safely at startup
 
 API_BASE = "http://127.0.0.1:8000"
 
 st.set_page_config(
-    page_title="AgriSentinel Enterprise | Insurer Cockpit",
+    page_title="AgriSentinel | Parametric Insurer Cockpit",
     page_icon="🌾",
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-# Load environment variables if available
-DEFAULT_TWILIO_SID = os.getenv("TWILIO_ACCOUNT_SID", "AC7b5b6cc7e83c59d0edc54bcf59a4dee1")
-DEFAULT_TWILIO_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "6af791ff2a26f1c8e69afe984fafcf17")
-DEFAULT_TWILIO_PHONE = os.getenv("TWILIO_PHONE_NUMBER", "+17372508034")
-DEFAULT_GROQ_KEY = os.getenv("GROQ_API_KEY", "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")
-DEFAULT_OWM_KEY = os.getenv("OPENWEATHER_API_KEY", "0f5614e650857443251cbb524550aad8")
 
 # Custom Enterprise CSS Theme
 st.markdown("""
@@ -35,49 +40,43 @@ st.markdown("""
     .main-header {
         background: linear-gradient(135deg, #0d1b2a, #1b263b, #1b4332);
         color: white;
-        padding: 24px 30px;
-        border-radius: 16px;
-        margin-bottom: 25px;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+        padding: 22px 28px;
+        border-radius: 14px;
+        margin-bottom: 20px;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.15);
         border: 1px solid rgba(255,255,255,0.1);
     }
     .main-header h1 {
-        font-size: 28px;
+        font-size: 26px;
         font-weight: 800;
         margin: 0 0 6px 0;
         letter-spacing: -0.5px;
-        display: flex;
-        align-items: center;
-        gap: 12px;
     }
     .main-header .sub-header {
-        font-size: 14px;
+        font-size: 13px;
         opacity: 0.85;
-        font-weight: 400;
     }
     
     .status-badge-bar {
         display: flex;
-        gap: 12px;
+        gap: 10px;
         flex-wrap: wrap;
-        margin-top: 14px;
+        margin-top: 12px;
     }
     .status-pill {
         background: rgba(255,255,255,0.12);
-        padding: 4px 12px;
-        border-radius: 20px;
+        padding: 4px 10px;
+        border-radius: 16px;
         font-size: 11px;
         font-family: 'JetBrains Mono', monospace;
-        letter-spacing: 0.5px;
         border: 1px solid rgba(255,255,255,0.2);
     }
     
-    /* Metric Cards */
     .metric-card {
         background: #ffffff;
-        border-radius: 12px;
-        padding: 18px 22px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        border-radius: 10px;
+        padding: 16px 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
         border: 1px solid #e2e8f0;
         border-left: 5px solid #2d6a4f;
     }
@@ -88,648 +87,456 @@ st.markdown("""
         border-left-color: #2b2d42;
     }
     .metric-val {
-        font-size: 28px;
+        font-size: 24px;
         font-weight: 800;
         color: #1a202c;
         margin: 4px 0;
     }
     .metric-lbl {
         font-size: 12px;
-        font-weight: 600;
-        color: #718096;
         text-transform: uppercase;
-        letter-spacing: 0.6px;
-    }
-    
-    /* Basis Risk Comparative Panel */
-    .basis-risk-container {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 20px;
-        margin: 20px 0;
-    }
-    .basis-card {
-        border-radius: 14px;
-        padding: 22px;
-        color: white;
-        box-shadow: 0 6px 18px rgba(0,0,0,0.12);
-    }
-    .basis-card.pmfby {
-        background: linear-gradient(145deg, #374151, #1f2937);
-        border: 1px solid #4b5563;
-    }
-    .basis-card.agrisentinel {
-        background: linear-gradient(145deg, #065f46, #047857);
-        border: 1px solid #10b981;
-    }
-    .basis-title {
-        font-size: 18px;
-        font-weight: 700;
-        margin-bottom: 8px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-    .basis-subtitle {
-        font-size: 12px;
-        opacity: 0.8;
-        margin-bottom: 16px;
-        font-family: 'JetBrains Mono', monospace;
-    }
-    .basis-stat {
-        background: rgba(0,0,0,0.2);
-        border-radius: 8px;
-        padding: 10px 14px;
-        margin-bottom: 10px;
-        font-size: 13px;
-    }
-    .basis-payout-box {
-        padding: 14px;
-        border-radius: 10px;
-        font-size: 15px;
-        font-weight: 700;
-        text-align: center;
-        margin-top: 15px;
+        color: #64748b;
+        font-weight: 600;
         letter-spacing: 0.5px;
     }
-    .payout-rejected {
-        background: rgba(239, 68, 68, 0.2);
-        border: 1px solid #ef4444;
-        color: #fca5a5;
-    }
-    .payout-instant {
-        background: rgba(16, 185, 129, 0.25);
-        border: 1px solid #34d399;
-        color: #a7f3d0;
-    }
-    
-    /* Farm Grid Cards */
-    .plot-grid-card {
-        border-radius: 14px;
-        padding: 16px;
-        color: white;
+
+    .farm-card {
+        background: #ffffff;
+        border-radius: 10px;
+        padding: 14px 16px;
+        border: 1px solid #cbd5e1;
         margin-bottom: 12px;
         transition: transform 0.15s ease;
+    }
+    .farm-card:hover {
+        transform: translateY(-2px);
         box-shadow: 0 4px 12px rgba(0,0,0,0.08);
     }
-    .plot-grid-card:hover {
-        transform: translateY(-2px);
+    .farm-card.breach {
+        border: 2px solid #ef4444;
+        background: #fef2f2;
     }
-    .card-safe {
-        background: linear-gradient(135deg, #1b4332, #2d6a4f);
-        border: 1px solid #40916c;
+    .farm-card.held {
+        border: 2px solid #f59e0b;
+        background: #fffbeb;
     }
-    .card-breach {
-        background: linear-gradient(135deg, #7f1d1d, #991b1b);
-        border: 1px solid #ef4444;
-        animation: pulse-breach 2s infinite;
+    .farm-card.rejected {
+        border: 2px solid #6b7280;
+        background: #f3f4f6;
     }
-    .card-audit {
-        background: linear-gradient(135deg, #78350f, #92400e);
-        border: 1px solid #f59e0b;
+
+    .basis-card {
+        padding: 18px 22px;
+        border-radius: 12px;
+        height: 100%;
     }
-    .card-warning {
-        background: linear-gradient(135deg, #854d0e, #a16207);
-        border: 1px solid #eab308;
+    .basis-card.pmfby {
+        background: #f8fafc;
+        border: 1.5px solid #cbd5e1;
+        border-left: 6px solid #64748b;
     }
-    @keyframes pulse-breach {
-        0%, 100% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.4); }
-        50% { box-shadow: 0 0 22px rgba(239, 68, 68, 0.85); }
+    .basis-card.agrisentinel {
+        background: #f0fdf4;
+        border: 1.5px solid #86efac;
+        border-left: 6px solid #16a34a;
     }
-    
-    .badge-pill {
-        display: inline-block;
-        padding: 3px 8px;
-        border-radius: 6px;
-        font-size: 10px;
-        font-family: 'JetBrains Mono', monospace;
+    .basis-title {
+        font-size: 16px;
+        font-weight: 700;
+        margin-bottom: 4px;
+    }
+    .basis-subtitle {
+        font-size: 11px;
+        text-transform: uppercase;
+        color: #64748b;
         font-weight: 600;
-        margin-top: 6px;
-        margin-right: 4px;
+        margin-bottom: 12px;
     }
-    .badge-crypto {
-        background: rgba(59, 130, 246, 0.25);
-        border: 1px solid #60a5fa;
-        color: #bfdbfe;
+    .tag-crypto-ok {
+        background: #dcfce7;
+        color: #166534;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        font-family: 'JetBrains Mono', monospace;
     }
-    .badge-crypto-tamper {
-        background: rgba(239, 68, 68, 0.3);
-        border: 1px solid #ef4444;
-        color: #fca5a5;
-    }
-    .badge-sat {
-        background: rgba(16, 185, 129, 0.25);
-        border: 1px solid #34d399;
-        color: #a7f3d0;
-    }
-    .badge-sat-audit {
-        background: rgba(245, 158, 11, 0.3);
-        border: 1px solid #f59e0b;
-        color: #fde68a;
+    .tag-crypto-fail {
+        background: #fee2e2;
+        color: #991b1b;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        font-family: 'JetBrains Mono', monospace;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# SIDEBAR: Enterprise Insurer Configuration & Keys
-st.sidebar.title("🛡️ Enterprise Settings")
-st.sidebar.caption("Insurance Carrier Portal / Anti-Fraud Node Registry")
+# SIDEBAR: Configuration & Integrity Controls
+st.sidebar.title("🛡️ Underwriter Controls")
+st.sidebar.caption("AgriSentinel v2.1 | Cryptographic Ingestion & Anti-Fraud Engine")
 
-st.sidebar.subheader("🔑 API Key Configuration")
-groq_key = st.sidebar.text_input("Groq API Key (LLaMA-3.3-70B)", value=DEFAULT_GROQ_KEY, type="password", help="Used for immediate agronomic advice generation in English & Tamil")
-tw_sid = st.sidebar.text_input("Twilio Account SID", value=DEFAULT_TWILIO_SID, type="password", help="Twilio account SID for outbound 2G voice calls")
-tw_token = st.sidebar.text_input("Twilio Auth Token", value=DEFAULT_TWILIO_TOKEN, type="password", help="Twilio auth token")
-tw_phone = st.sidebar.text_input("Twilio Outbound Phone", value=DEFAULT_TWILIO_PHONE, help="Twilio verified sender phone number")
-farmer_test_phone = st.sidebar.text_input("Farmer Test Phone", value="+919363849952", help="Farmer mobile number for automated 2G voice alert dispatch")
-owm_key = st.sidebar.text_input("OpenWeatherMap API Key", value=DEFAULT_OWM_KEY, type="password", help="Satellite verification API key (NASA/OWM)")
+# Secrets loaded safely from environment
+env_twilio_sid = os.getenv("TWILIO_ACCOUNT_SID", "")
+env_twilio_phone = os.getenv("TWILIO_PHONE_NUMBER", "")
+env_groq_set = bool(os.getenv("GROQ_API_KEY"))
+env_owm_set = bool(os.getenv("OPENWEATHER_API_KEY"))
+
+with st.sidebar.expander("🔑 Integration Credentials", expanded=False):
+    st.markdown("**Environment Configuration Status:**")
+    st.write(f"- Twilio SID: `{'Configured' if env_twilio_sid else 'Missing (Simulation Mode)'}`")
+    st.write(f"- Groq AI Key: `{'Configured' if env_groq_set else 'Missing (Rulebase Mode)'}`")
+    st.write(f"- OpenWeatherMap: `{'Configured' if env_owm_set else 'Missing (Baseline Mode)'}`")
+    st.caption("Secrets are read strictly from your local `.env` file and are never committed to Git.")
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("📡 Simulated IoT Nodes (ECDSA)")
-st.sidebar.caption("Cryptographic keys pre-seeded on SECP256k1 curve:")
-for node_name in ["node_1 (TN)", "node_2 (UP)", "node_3 (GJ)"]:
-    st.sidebar.code(f"{node_name}\nCurve: SECP256k1\nStatus: Keypair Active", language="text")
+st.sidebar.subheader("🔄 Demo Session Reset")
+st.sidebar.caption("Restores all 9 farm profiles to nominal baselines and flushes the cryptographic replay cache.")
 
-st.sidebar.markdown("---")
-if st.sidebar.button("🔄 Force Refresh View", use_container_width=True):
-    st.rerun()
-
-if st.sidebar.button("⚠️ Reset All Policies & Logs", use_container_width=True):
+if st.sidebar.button("🧹 Reset Demo State", use_container_width=True):
     try:
-        requests.post(f"{API_BASE}/api/policies/reset", timeout=3)
-        st.sidebar.success("Policies and logs reset successfully!")
+        r = requests.post(f"{API_BASE}/api/policies/reset", timeout=3).json()
+        st.sidebar.success(r.get("message", "Reset complete"))
         time.sleep(0.5)
         st.rerun()
     except Exception as e:
         st.sidebar.error(f"Reset failed: {e}")
 
-# Header
+# MAIN HEADER BANNER
 st.markdown("""
 <div class="main-header">
-    <h1>🌾 AgriSentinel &nbsp;<span style="font-size:16px; background:#10b981; color:white; padding:3px 10px; border-radius:20px; font-weight:600;">ENTERPRISE B2B</span></h1>
-    <div class="sub-header">Autonomous Parametric Crop Insurance & Cryptographic Anti-Fraud Telemetry Architecture</div>
+    <h1>🌾 AGRISENTINEL | Parametric Insurer Operations Cockpit</h1>
+    <div class="sub-header">
+        Decentralized Proof-of-Location & Hardware-Signed Telemetry for Zero-Delay Parametric Crop Insurance
+    </div>
     <div class="status-badge-bar">
-        <span class="status-pill">🔐 SECP256k1 ECDSA: ACTIVE</span>
-        <span class="status-pill">🛰️ SATELLITE CROSS-CHECK: ENABLED</span>
-        <span class="status-pill">🧠 GROQ LLAMA-3.3-70B: READY</span>
-        <span class="status-pill">📞 2G TELECOM VOICE: REGIONAL-9</span>
-        <span class="status-pill">⚡ SETTLEMENT LATENCY: &lt; 2.0s</span>
+        <span class="status-pill">🔐 SILICON CRYPTO: ECDSA SECP256k1 (REGISTERED REGISTRY)</span>
+        <span class="status-pill">📡 WEATHER: OPENWEATHERMAP STATION GRID & REGIONAL BASELINES</span>
+        <span class="status-pill">📞 2G VOICE: TWILIO IVR ADVISORY (TAMIL / HINDI)</span>
+        <span class="status-pill">⚖️ UNDERWRITING: PARAMETRIC MICRO-RIDER WORKFLOW</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# Fetch backend data
+# Fetch backend state
 try:
     grid_res = requests.get(f"{API_BASE}/api/grid", timeout=3).json()
     claims_res = requests.get(f"{API_BASE}/api/claims", timeout=3).json()
     audit_res = requests.get(f"{API_BASE}/api/audit", timeout=3).json()
     basis_res = requests.get(f"{API_BASE}/api/basis-risk-comparison", timeout=3).json()
+    
     grid_data = grid_res.get("grid", [])
     claims_data = claims_res.get("claims", [])
     audit_data = audit_res.get("audit_log", [])
     tamper_blocked_count = grid_res.get("tamper_attempts_blocked", 0)
 except Exception as e:
-    st.error(f"Cannot connect to AgriSentinel Backend on {API_BASE}. Ensure `backend.py` is running.")
-    st.info("Run command: `python -m uvicorn backend:app --host 127.0.0.1 --port 8000 --reload`")
+    st.error(f"⚠️ Cannot connect to AgriSentinel Backend at `{API_BASE}`.")
+    st.info("Start the FastAPI backend: `python -m uvicorn backend:app --host 127.0.0.1 --port 8000 --reload`")
     st.stop()
 
-def get_plot_label(pid: str) -> str:
-    for p in grid_data:
-        if p.get("plot_id") == pid:
-            return f"{pid.upper()} - {p.get('farmer_name', '')} ({p.get('crop', '')}, {p.get('state', '')})"
-    return pid.upper()
-
-# TOP METRICS ROW
-total_grids = len(grid_data)
+# TOP KPI METRICS
+total_farms = len(grid_data)
 active_policies = sum(1 for p in grid_data if p.get("active"))
-total_underwritten = sum(p.get("sum_insured", 0) for p in grid_data)
-total_claims_paid = len(claims_data)
-total_disbursed = sum(c.get("payout_amount", 0) for c in claims_data)
+total_underwritten = sum(p.get("sum_insured_inr", 0) for p in grid_data)
+total_claims_count = len(claims_data)
+total_benefit_calculated = sum(c.get("payout_calculated_inr", 0) for c in claims_data)
 
 m1, m2, m3, m4 = st.columns(4)
 with m1:
     st.markdown(f"""
     <div class="metric-card">
-        <div class="metric-lbl">Active Farm Grids</div>
-        <div class="metric-val">{total_grids}</div>
-        <div style="font-size:12px; color:#2d6a4f; font-weight:600;">50x50m Hyperlocal Polygons</div>
+        <div class="metric-lbl">Monitored Farm Profiles</div>
+        <div class="metric-val">{total_farms}</div>
+        <div style="font-size:12px; color:#2d6a4f; font-weight:600;">9 Indian Agro-Climatic States</div>
     </div>
     """, unsafe_allow_html=True)
 with m2:
     st.markdown(f"""
     <div class="metric-card">
-        <div class="metric-lbl">Validated Policies Underwritten</div>
+        <div class="metric-lbl">Total Underwritten Value</div>
         <div class="metric-val">₹{total_underwritten:,.0f}</div>
-        <div style="font-size:12px; color:#2d6a4f; font-weight:600;">{active_policies} Active In-Force Contracts</div>
+        <div style="font-size:12px; color:#2d6a4f; font-weight:600;">{active_policies} Active Micro-Riders</div>
     </div>
     """, unsafe_allow_html=True)
 with m3:
     st.markdown(f"""
     <div class="metric-card alert">
-        <div class="metric-lbl">Parametric Payouts Disbursed</div>
-        <div class="metric-val">₹{total_disbursed:,.0f}</div>
-        <div style="font-size:12px; color:#d90429; font-weight:600;">{total_claims_paid} Automated Settlements</div>
+        <div class="metric-lbl">Simulated Benefit Assessed</div>
+        <div class="metric-val">₹{total_benefit_calculated:,.0f}</div>
+        <div style="font-size:12px; color:#d90429; font-weight:600;">{total_claims_count} Claim Intents Generated</div>
     </div>
     """, unsafe_allow_html=True)
 with m4:
     st.markdown(f"""
     <div class="metric-card shield">
-        <div class="metric-lbl">Tamper Attacks Blocked</div>
+        <div class="metric-lbl">Tamper / Spoof Attempts Blocked</div>
         <div class="metric-val">{tamper_blocked_count}</div>
-        <div style="font-size:12px; color:#4a5568; font-weight:600;">ECDSA & Satellite Anti-Fraud</div>
+        <div style="font-size:12px; color:#4a5568; font-weight:600;">SECP256k1 & Meteorological Gate</div>
     </div>
     """, unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# -------------------------------------------------------------
-# SIDE-BY-SIDE BASIS RISK VISUAL PROOF PANEL
-# -------------------------------------------------------------
-st.subheader("⚖️ Visual Proof: Eliminating Basis Risk in Crop Insurance")
-st.caption("Demonstrating how traditional area-yield insurance (PMFBY) fails smallholder farmers vs. AgriSentinel's cryptographic micro-grid.")
-
-pmfby = basis_res.get("pmfby_traditional_station", {})
-agri = basis_res.get("agrisentinel_hyperlocal_node", {})
-
-c_left, c_right = st.columns(2)
-
-with c_left:
-    st.markdown(f"""
-    <div class="basis-card pmfby">
-        <div class="basis-title">🏛️ {pmfby.get('name', 'District Weather Station (IMD)')}</div>
-        <div class="basis-subtitle">DISTANCE FROM PLOT: {pmfby.get('distance_from_farm_km', 15.2)} KM AWAY (AREA-LEVEL MACRO SENSOR)</div>
-        <div class="basis-stat">
-            <b>Recorded Ambient Temp:</b> {pmfby.get('recorded_temperature_c', 28.5)}°C<br>
-            <b>Recorded 24h Rainfall:</b> {pmfby.get('recorded_rainfall_24h_mm', 12.0)} mm<br>
-            <b>Relative Humidity:</b> {pmfby.get('recorded_relative_humidity', 68.0)}%<br>
-            <b>Regional Status:</b> {pmfby.get('macro_status', 'NORMAL / NO EXTREME EVENT')}
-        </div>
-        <div style="font-size:13px; line-height:1.5; opacity:0.9; min-height:60px;">
-            ⚠️ <b>Basis Risk Defect:</b> {pmfby.get('basis_risk_failure_explanation', 'District station failed to detect localized micro-climate drought.')}
-        </div>
-        <div class="basis-payout-box payout-rejected">
-            ❌ {pmfby.get('payout_status', 'CLAIM REJECTED (₹0 Payout)')}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with c_right:
-    st.markdown(f"""
-    <div class="basis-card agrisentinel">
-        <div class="basis-title">🛡️ {agri.get('name', 'AgriSentinel Fence Node #1')}</div>
-        <div class="basis-subtitle">RESOLUTION: {agri.get('grid_resolution', '50x50m micro-polygon')} | REAL-TIME TELEMETRY</div>
-        <div class="basis-stat">
-            <b>Hyperlocal Root-Zone Temp:</b> {agri.get('on_farm_temperature_c', 43.8)}°C (Thermal Stress)<br>
-            <b>Soil Moisture:</b> {agri.get('on_farm_soil_moisture_pct', 11.5)}% (Breached Threshold &lt; {agri.get('drought_threshold_pct', 18.0)}%)<br>
-            <b>Cryptographic Signature:</b> <span style="color:#a7f3d0; font-weight:700;">{agri.get('crypto_signature_status', 'ECDSA-SECP256k1 VALID')}</span><br>
-            <b>Satellite Validation:</b> <span style="color:#a7f3d0; font-weight:700;">{agri.get('satellite_cross_check', 'SATELLITE VERIFIED')}</span>
-        </div>
-        <div style="font-size:13px; line-height:1.5; opacity:0.9; min-height:60px;">
-            ⚡ <b>Autonomous Settlement:</b> Verified in {agri.get('latency_seconds', 1.4)}s. Zero human paperwork. {agri.get('voice_alert_dispatch', 'Voice alert triggered.')}
-        </div>
-        <div class="basis-payout-box payout-instant">
-            ✅ {agri.get('payout_status', 'INSTANT AUTOMATED PAYOUT (₹50,000 DISBURSED)')}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-st.markdown("---")
+# MAIN TAB NAVIGATION
+tab_cockpit, tab_basis_risk, tab_antifraud, tab_claims, tab_roi = st.tabs([
+    "🌾 1. Regional Farm Profiles",
+    "⚖️ 2. Basis Risk Comparison",
+    "🛡️ 3. Cryptographic Verification & Anti-Fraud",
+    "📑 4. Simulated Claims & Audit Ledger",
+    "💰 5. Insurer Unit Economics & Penalty Savings"
+])
 
 # -------------------------------------------------------------
-# INTERACTIVE LIVE FARM GRID CARDS WITH ECDSA & SATELLITE BADGES
+# TAB 1: 9 REGIONAL FARM PROFILES
 # -------------------------------------------------------------
-st.subheader("🗺️ Live Farm Grid Monitor (Multi-State India Registry)")
-st.caption("Real-time telemetry, SECP256k1 signature validation badges, and satellite macro cross-validation status.")
+with tab_cockpit:
+    st.subheader("9 Calibrated Regional Farm Profiles Across India")
+    st.caption("Each farm is bound to a registered SECP256k1 hardware node measuring on-plot micro-climate telemetry.")
 
-STATE_FLAGS = {
-    "Tamil Nadu": "🏛️", "Uttar Pradesh": "🕌", "Gujarat": "🦁",
-    "Andhra Pradesh": "🌶️", "West Bengal": "🐅", "Rajasthan": "🏜️",
-    "Maharashtra": "⛰️", "Kerala": "🌴", "Karnataka": "🏯"
-}
-
-for row_start in range(0, len(grid_data), 3):
     cols = st.columns(3)
-    for i, col in enumerate(cols):
-        idx = row_start + i
-        if idx >= len(grid_data):
-            break
-        p = grid_data[idx]
-        status = p.get("status", "NORMAL")
-        moisture = p.get("soil_moisture", 0.0)
-        temp = p.get("temperature", 0.0)
-        threshold = p.get("moisture_threshold", 18.0)
-        state = p.get("state", "")
-        lang = p.get("language_name", "")
-        flag = STATE_FLAGS.get(state, "🌿")
-        crypto_status = p.get("crypto_status", "SECP256k1: VALID")
-        satellite_status = p.get("satellite_status", "SATELLITE: MATCHED")
-
+    for i, farm in enumerate(grid_data):
+        col_idx = i % 3
+        status = farm.get("status", "NORMAL")
+        card_class = "farm-card"
         if status == "PARAMETRIC_BREACH":
-            css_class = "card-breach"
-            status_text = "🔴 PARAMETRIC BREACH (PAYOUT SENT)"
-        elif status == "HELD_PHYSICAL_TAMPERING_AUDIT" or "TAMPER" in status:
-            css_class = "card-audit"
-            status_text = "⚠️ PHYSICAL TAMPERING AUDIT REQUIRED"
-        elif status == "SIG_REJECTED":
-            css_class = "card-breach"
-            status_text = "❌ SPOOFED PAYLOAD REJECTED"
-        elif moisture < threshold + 3.0:
-            css_class = "card-warning"
-            status_text = "🟡 PRE-BREACH WARNING"
-        else:
-            css_class = "card-safe"
-            status_text = "🟢 SAFE / WITHIN THRESHOLD"
+            card_class += " breach"
+        elif status == "HELD_FOR_INSPECTION":
+            card_class += " held"
+        elif status == "SECURITY_REJECTED":
+            card_class += " rejected"
 
-        # Badge styling
-        crypto_badge_class = "badge-crypto-tamper" if "REJECTED" in crypto_status or "SPOOF" in crypto_status else "badge-crypto"
-        sat_badge_class = "badge-sat-audit" if "TAMPER" in satellite_status or "AUDIT" in satellite_status else "badge-sat"
-
-        with col:
+        with cols[col_idx]:
             st.markdown(f"""
-            <div class="plot-grid-card {css_class}">
+            <div class="{card_class}">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <h3 style="margin:0; font-size:17px; font-weight:700;">{flag} {p.get('plot_id', '').upper()}</h3>
-                    <span style="font-size:11px; font-weight:700; opacity:0.9;">₹{p.get('sum_insured', 0):,.0f}</span>
+                    <b style="font-size:15px;">{farm['plot_id'].upper()}: {farm['farmer_name']}</b>
+                    <span style="font-size:11px; background:#e2e8f0; padding:2px 6px; border-radius:10px; font-weight:600;">{farm['node_id']}</span>
                 </div>
-                <div style="font-size:14px; font-weight:600; margin-top:2px;">{p.get('farmer_name', '')}</div>
-                <div style="font-size:12px; opacity:0.85;">📍 {state} ({p.get('region', '')}) &nbsp;|&nbsp; 🗣️ {lang}</div>
-                <div style="font-size:12px; opacity:0.85; margin-bottom:6px;">🌾 {p.get('crop', '')}</div>
-                <div style="background:rgba(0,0,0,0.22); border-radius:8px; padding:6px 10px; font-size:12px; margin-bottom:8px;">
-                    💧 <b>Soil Moisture:</b> {moisture:.1f}% (Limit: &lt;{threshold}%)<br>
-                    🌡️ <b>Temperature:</b> {temp:.1f}°C &nbsp;|&nbsp; 🌧️ <b>Rain:</b> {p.get('rainfall_mm', 0.0):.1f}mm
+                <div style="font-size:12px; color:#475569; margin:3px 0 8px 0;">
+                    🌾 <b>{farm['crop']}</b> | 📍 {farm['district']}, {farm['state']}
                 </div>
-                <div style="font-size:11px; font-weight:700;">{status_text}</div>
-                <div>
-                    <span class="badge-pill {crypto_badge_class}">🔐 {crypto_status}</span>
-                    <span class="badge-pill {sat_badge_class}">🛰️ {satellite_status}</span>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px; font-size:12px; background:rgba(0,0,0,0.02); padding:8px; border-radius:6px;">
+                    <div>💧 Moisture: <b>{farm['soil_moisture']:.1f}%</b></div>
+                    <div>🌡️ Temp: <b>{farm['temperature']:.1f}°C</b></div>
+                    <div>🌧️ Rainfall: <b>{farm['rainfall_mm']:.1f} mm</b></div>
+                    <div>🛡️ Cover: <b>₹{farm['sum_insured_inr']:,.0f}</b></div>
+                </div>
+                <div style="margin-top:8px; font-size:11px; display:flex; justify-content:space-between;">
+                    <span class="{'tag-crypto-ok' if 'VALID' in farm['crypto_status'] else 'tag-crypto-fail'}">{farm['crypto_status']}</span>
+                    <span style="color:#64748b; font-weight:600;">{farm['status']}</span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
-st.markdown("---")
+    st.markdown("---")
+    st.subheader("🌾 Farm Agronomic Advisory & Regional Voice Dispatch")
+    sel_plot = st.selectbox(
+        "Select a Farm Profile to Inspect Live Agronomic Recommendations:",
+        [f"{p['plot_id']} - {p['farmer_name']} ({p['crop']}, {p['state']})" for p in grid_data]
+    )
+    selected_pid = sel_plot.split(" - ")[0]
 
-# -------------------------------------------------------------
-# ANOMALY TRIGGER & STRESS-TESTING SUITE
-# -------------------------------------------------------------
-st.subheader("🧪 Anti-Fraud & Anomaly Simulation Testing Suite")
-st.caption("Interact directly with the cryptographic and satellite verification engine to test edge cases, tamper scenarios, and payouts.")
+    col_adv_left, col_adv_right = st.columns([2, 1])
+    with col_adv_left:
+        if st.button(f"🔍 Generate Agronomic Advisory for {selected_pid.upper()}"):
+            try:
+                adv = requests.get(f"{API_BASE}/api/advisory/{selected_pid}", timeout=5).json()
+                st.markdown(f"**Crop:** {adv.get('crop')} | **Region:** {adv.get('state')} | **Growth Status:** {adv.get('condition')}")
+                st.info(f"💡 **Recommended Field Actions (English):**\n- " + "\n- ".join(adv.get("actions_english", [])))
+                st.success(f"🗣️ **Regional Language ({adv.get('language_name')}):**\n- " + "\n- ".join(adv.get("actions_regional", [])))
+                st.warning(f"⚠️ **Chemical Spraying Caution:** {adv.get('spray_caution')}")
+                st.caption(f"Source: {adv.get('source')} | {adv.get('disclaimer')}")
+            except Exception as e:
+                st.error(f"Failed to generate advisory: {e}")
 
-tab_drought, tab_tamper, tab_spoof, tab_voice = st.tabs([
-    "🚨 1. Legitimate Drought Breach",
-    "🪣 2. Physical Tamper (Flood Fraud)",
-    "🔓 3. Cryptographic Signature Tamper",
-    "📞 4. Telecom Voice & Groq Advisory"
-])
-
-# TAB 1: Legitimate Drought Breach
-with tab_drought:
-    st.markdown("#### Test Autonomous Parametric Payout")
-    st.caption("Transmits a verified SECP256k1 signed telemetry packet indicating extreme root-zone soil dryness.")
-    col_d1, col_d2 = st.columns([1, 1])
-    with col_d1:
-        sel_plot_d = st.selectbox(
-            "Select Farm Plot for Drought Test",
-            [p["plot_id"] for p in grid_data],
-            format_func=get_plot_label
-        )
-        d_moisture = st.slider("Soil Moisture (% - threshold is 18%)", 5.0, 30.0, 11.5, 0.5, key="d_moist")
-        d_temp = st.slider("Temperature (°C)", 30.0, 55.0, 43.5, 0.5, key="d_temp")
-    with col_d2:
-        st.info("When triggered, AgriSentinel generates an ECDSA signature using node's private key, verifies against satellite thermal trends, automatically issues the claim, and queues the 2G voice alert.")
-        if st.button("⚡ Execute Verified Drought Payout", type="primary", use_container_width=True):
-            node_id = f"node_{sel_plot_d.split('_')[-1]}"
-            sk, vk = CryptoEngine.generate_keypair()
-            telemetry = {
-                "plot_id": sel_plot_d,
-                "timestamp": time.time(),
-                "temperature": d_temp,
-                "humidity": 22.0,
-                "pressure": 1012.0,
-                "soil_moisture": d_moisture,
-                "rainfall_mm": 0.0
-            }
-            packet = CryptoEngine.create_signed_packet(node_id, sk, vk, telemetry)
-            res = requests.post(f"{API_BASE}/api/telemetry", json=packet, timeout=6)
-            if res.status_code == 200:
-                data = res.json()
-                st.success(f"✅ Telemetry Accepted! Crypto: {data.get('cryptographic_verification')} | Satellite: {data.get('satellite_cross_check')}")
-                ev = data.get("evaluation", {})
-                if ev.get("triggered"):
-                    st.balloons()
-                    st.success(f"🎉 PAYOUT TRIGGERED! ₹{ev.get('payout_amount', 0):,.0f} disbursed to {ev.get('farmer_phone', '')}")
-                else:
-                    st.info(f"Condition: {ev.get('reason')}")
-                time.sleep(1)
-                st.rerun()
-            else:
-                st.error(f"Error: {res.text}")
-
-# TAB 2: Physical Tamper (Water-Bucket Fraud)
-with tab_tamper:
-    st.markdown("#### Test Satellite Remote Sensing Cross-Validation (Water-Bucket Attack)")
-    st.caption("A dishonest actor submerges an on-farm sensor in a bucket of water to fake a catastrophic flash flood (100% moisture). AgriSentinel queries satellite imagery (0% cloud cover, 0mm precipitation) and freezes the fraudulent payout!")
-    col_t1, col_t2 = st.columns([1, 1])
-    with col_t1:
-        sel_plot_t = st.selectbox(
-            "Select Farm Plot for Tamper Attack",
-            [p["plot_id"] for p in grid_data],
-            key="tamper_plot",
-            format_func=get_plot_label
-        )
-        fake_moisture = st.slider("Simulated Spoofed Moisture (%)", 85.0, 100.0, 96.5, 0.5)
-        fake_temp = st.slider("Sensor Temp (°C)", 20.0, 35.0, 27.0, 0.5, key="tamper_temp")
-    with col_t2:
-        st.warning("⚠️ **Expected Defense Response:** Cryptographic signature is authentic (node hardware wasn't hacked), but satellite cross-validation reveals 0mm rain. System flags `PHYSICAL TAMPERING AUDIT REQUIRED` and rejects the claim.")
-        if st.button("🚨 Simulate Water-Bucket Flood Fraud Attack", use_container_width=True):
-            node_id = f"node_{sel_plot_t.split('_')[-1]}"
-            sk, vk = CryptoEngine.generate_keypair()
-            telemetry = {
-                "plot_id": sel_plot_t,
-                "timestamp": time.time(),
-                "temperature": fake_temp,
-                "humidity": 60.0,
-                "pressure": 1012.0,
-                "soil_moisture": fake_moisture,
-                "rainfall_mm": 0.0 # Sensor claims 96.5% moisture with zero rain
-            }
-            packet = CryptoEngine.create_signed_packet(node_id, sk, vk, telemetry)
-            res = requests.post(f"{API_BASE}/api/telemetry", json=packet, timeout=6)
-            if res.status_code == 200:
-                data = res.json()
-                if data.get("status") == "HELD_FOR_AUDIT":
-                    st.error(f"🛑 FRAUD DETECTED & BLOCKED! Status: {data.get('status')}")
-                    st.warning(f"Satellite Cross Check: {data.get('satellite_cross_check')}")
-                    st.info(f"Audit Finding: {data.get('evaluation', {}).get('audit_finding')}")
-                else:
-                    st.json(data)
-                time.sleep(1.5)
-                st.rerun()
-
-# TAB 3: Cryptographic Signature Tamper
-with tab_spoof:
-    st.markdown("#### Test Cryptographic Replay / Man-in-the-Middle Spoofing")
-    st.caption("An attacker intercepts or forges a telemetry packet without the hardware node's SECP256k1 private key.")
-    col_s1, col_s2 = st.columns([1, 1])
-    with col_s1:
-        st.code("""
-// Corrupted Telemetry Signature Payload:
-{
-  "node_id": "node_1",
-  "signature": "3045022100deadbeef...corrupted_signature",
-  "telemetry": { "soil_moisture": 5.0, "temperature": 52.0 }
-}
-        """, language="json")
-    with col_s2:
-        st.error("🛡️ **Expected Defense Response:** Zero-trust architecture checks ECDSA signature against public key. Reject instantly with HTTP 403 Forbidden and increment blocked counter.")
-        if st.button("💀 Inject Tampered / Spoofed Signature", use_container_width=True):
-            sk, vk = CryptoEngine.generate_keypair()
-            telemetry = {
-                "plot_id": "plot_1",
-                "timestamp": time.time(),
-                "temperature": 48.0,
-                "humidity": 20.0,
-                "pressure": 1010.0,
-                "soil_moisture": 8.0,
-                "rainfall_mm": 0.0
-            }
-            packet = CryptoEngine.create_signed_packet("node_1", sk, vk, telemetry)
-            # Tamper with signature
-            packet["signature"] = packet["signature"][:-8] + "0000ffff"
-            res = requests.post(f"{API_BASE}/api/telemetry", json=packet, timeout=6)
-            if res.status_code == 403:
-                st.success("🛡️ ATTACK BLOCKED! Server returned HTTP 403 Forbidden:")
-                st.code(res.text, language="json")
-                time.sleep(1)
-                st.rerun()
-            else:
-                st.warning(f"Response: {res.status_code} - {res.text}")
-
-# TAB 4: Telecom Voice & Groq Advisory
-with tab_voice:
-    st.markdown("#### Test Outbound 2G Regional Voice Call & Groq Agronomic Advice")
-    st.caption("Triggers an outbound telecom phone call reading localized advice in the farmer's native state language.")
-    col_v1, col_v2 = st.columns([1, 1])
-    with col_v1:
-        v_plot = st.selectbox(
-            "Select Farm Plot",
-            [p["plot_id"] for p in grid_data],
-            key="v_plot",
-            format_func=get_plot_label
-        )
-        p_info = next((p for p in grid_data if p["plot_id"] == v_plot), {})
-        target_phone = st.text_input("Destination Farmer Phone", value=farmer_test_phone, key="phone_input")
-        
-        btn_call, btn_adv = st.columns(2)
-        with btn_call:
-            if st.button(f"📞 Dispatch Call ({p_info.get('language_name')})", type="primary", use_container_width=True):
-                call_payload = {
-                    "plot_id": v_plot,
-                    "phone_number": target_phone
-                }
-                if tw_sid:
-                    call_payload["twilio_sid"] = tw_sid
-                if tw_token:
-                    call_payload["twilio_token"] = tw_token
-                if tw_phone:
-                    call_payload["twilio_phone"] = tw_phone
-
-                res = requests.post(
+    with col_adv_right:
+        st.markdown("**📞 2G Regional Voice Call Test**")
+        target_phone = st.text_input("Destination Farmer Mobile:", value="+919363849952")
+        if st.button("📲 Dispatch Outbound Voice Alert"):
+            try:
+                voice_res = requests.post(
                     f"{API_BASE}/api/telecom/trigger-voice",
-                    json=call_payload,
-                    timeout=8
-                )
-                if res.status_code == 200:
-                    d = res.json()
-                    if d.get("status") == "queued":
-                        st.success(f"Call initiated to {target_phone}! SID: {d.get('call_sid')}")
-                    elif d.get("status") == "simulated":
-                        st.info("Simulated dispatch (No live Twilio credentials found in environment or sidebar). Enter your Twilio credentials in the sidebar to place a live phone call.")
-                    else:
-                        st.warning(str(d))
+                    json={"plot_id": selected_pid, "phone_number": target_phone},
+                    timeout=5
+                ).json()
+                st.json(voice_res)
+            except Exception as e:
+                st.error(f"Voice dispatch failed: {e}")
+
+# -------------------------------------------------------------
+# TAB 2: BASIS RISK COMPARATIVE ANALYSIS
+# -------------------------------------------------------------
+with tab_basis_risk:
+    st.subheader("⚖️ The Core Problem: Eliminating Basis Risk in Crop Insurance")
+    st.caption("Side-by-side comparison: Why traditional area-approach insurance fails smallholder farmers vs. AgriSentinel's cryptographic micro-grid.")
+
+    pmfby = basis_res.get("traditional_pmfby_station", {})
+    agri = basis_res.get("agrisentinel_hyperlocal_node", {})
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown(f"""
+        <div class="basis-card pmfby">
+            <div class="basis-title">🏛️ {pmfby.get('name', 'District IMD Weather Station')}</div>
+            <div class="basis-subtitle">DISTANCE: {pmfby.get('distance_from_farm_km', 15.2)} KM AWAY (AREA-LEVEL APPROACH)</div>
+            <p><b>Measured Temperature:</b> {pmfby.get('recorded_temperature_c', 28.5)}°C</p>
+            <p><b>Measured Rainfall (1h):</b> {pmfby.get('recorded_rainfall_1h_mm', 0.0)} mm</p>
+            <p><b>Station Assessment:</b> {pmfby.get('station_status')}</p>
+            <div style="background:#fee2e2; border-left:4px solid #ef4444; padding:10px; border-radius:6px; margin-top:12px;">
+                <b style="color:#991b1b;">❌ {pmfby.get('claim_decision')}</b>
+                <div style="font-size:12px; color:#7f1d1d; margin-top:4px;">
+                    {pmfby.get('basis_risk_explanation')}
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with c2:
+        st.markdown(f"""
+        <div class="basis-card agrisentinel">
+            <div class="basis-title">📡 {agri.get('name', 'AgriSentinel Hyperlocal Node')}</div>
+            <div class="basis-subtitle">LOCATION: DIRECTLY ON-PLOT (50m × 50m RESOLUTION)</div>
+            <p><b>On-Plot Soil Moisture:</b> {agri.get('on_farm_soil_moisture_pct', 11.2)}% (Threshold: {agri.get('contractual_drought_threshold', 18.0)}%)</p>
+            <p><b>On-Plot Temperature:</b> {agri.get('on_farm_temperature_c', 42.1)}°C</p>
+            <p><b>Cryptographic Integrity:</b> <span class="tag-crypto-ok">{agri.get('crypto_verification')}</span></p>
+            <p><b>Weather Corroboration:</b> {agri.get('weather_corroboration')}</p>
+            <div style="background:#dcfce7; border-left:4px solid #16a34a; padding:10px; border-radius:6px; margin-top:12px;">
+                <b style="color:#166534;">✅ {agri.get('simulated_claim_status')}</b>
+                <div style="font-size:12px; color:#14532d; margin-top:4px;">
+                    Settlement Status: {agri.get('settlement_integration')}<br>
+                    Voice Dispatch: {agri.get('voice_dispatch')}
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# -------------------------------------------------------------
+# TAB 3: CRYPTOGRAPHIC VERIFICATION & ANTI-FRAUD
+# -------------------------------------------------------------
+with tab_antifraud:
+    st.subheader("🛡️ Cryptographic Data-Trust & Replay Defense Test Harness")
+    st.caption("Test how the ingestion gateway rejects spoofed keys, tampered payloads, replayed packets, and physical bucket immersion anomalies.")
+
+    t_col1, t_col2 = st.columns(2)
+    with t_col1:
+        st.markdown("#### 1. Test Cryptographic Signature Defense")
+        st.write("Submit an altered telemetry packet with corrupted signature bytes:")
+        if st.button("🧪 Transmit Corrupted SECP256k1 Signature"):
+            # Construct deliberate invalid signature
+            bad_payload = {
+                "node_id": "node_1",
+                "plot_id": "plot_1",
+                "signature": "30440220111111111111111111111111111111111111111111111111111111111111111102202222222222222222222222222222222222222222222222222222222222222222",
+                "telemetry": {
+                    "plot_id": "plot_1",
+                    "timestamp": time.time(),
+                    "temperature": 41.5,
+                    "humidity": 45.0,
+                    "pressure": 1012.0,
+                    "soil_moisture": 11.0,
+                    "rainfall_mm": 0.0
+                }
+            }
+            try:
+                res = requests.post(f"{API_BASE}/api/telemetry", json=bad_payload)
+                if res.status_code == 403:
+                    st.error("🛡️ HTTP 403 FORBIDDEN: Cryptographic defense blocked tampered signature!")
+                    st.json(res.json())
                 else:
-                    st.error(res.text)
-        with btn_adv:
-            if st.button("🧠 Groq LLaMA Advisory", use_container_width=True):
-                with st.spinner("Querying Groq LLaMA-3.3-70B model..."):
-                    adv_res = requests.get(f"{API_BASE}/api/advisory/{v_plot}", timeout=10)
-                    if adv_res.status_code == 200:
-                        st.session_state["advisory_data"] = adv_res.json()
-                    else:
-                        st.error("Failed to fetch Groq advisory.")
+                    st.warning(f"Unexpected response code: {res.status_code}")
+            except Exception as e:
+                st.error(f"Error testing crypto: {e}")
 
-    with col_v2:
-        if "advisory_data" in st.session_state:
-            adv = st.session_state["advisory_data"]
-            st.markdown(f"**Agronomic Mitigation Model:** `{adv.get('model', 'Groq LLaMA-3.3')}` ({adv.get('source', '')})")
-            
-            c_en, c_reg = st.columns(2)
-            with c_en:
-                st.markdown("**English Action Plan:**")
-                for item in adv.get("actions_english", adv.get("actions", [])):
-                    st.markdown(f"- {item}")
-            with c_reg:
-                target_lang = adv.get("language_name") or p_info.get("language_name", "Regional")
-                st.markdown(f"**Regional Action Plan ({target_lang}):**")
-                reg_items = adv.get("actions_regional") or adv.get("actions_tamil", [])
-                for item in reg_items:
-                    st.markdown(f"- {item}")
-                    
-            with st.expander("🔊 2G Voice Synthesized Audio Script"):
-                st.write(adv.get("regional_audio_script") or adv.get("tamil_audio_script", ""))
-        else:
-            st.info("Click 'Groq LLaMA Advisory' to generate immediate agronomic mitigation steps tailored for this crop and weather state.")
-
-    with st.expander("📜 Preview TwiML Voice XML Webhook Payload"):
-        twiml_res = requests.get(f"{API_BASE}/api/twilio/voice?plot_id={v_plot}&moisture=11.5&amount={p_info.get('sum_insured', 50000)}", timeout=3)
-        st.code(twiml_res.text, language="xml")
-
-st.markdown("---")
+    with t_col2:
+        st.markdown("#### 2. Test Physical Bucket-Immersion Anomaly Hold")
+        st.write("Simulate a farmer submerging the probe in water while the weather station reports 0 rain and clear skies:")
+        if st.button("🪣 Transmit Bucket Immersion Divergence (95% Moisture, 0 Rain)"):
+            try:
+                override_payload = {
+                    "plot_id": "plot_1",
+                    "soil_moisture": 95.0,
+                    "temperature": 32.0,
+                    "humidity": 40.0,
+                    "pressure": 1012.0,
+                    "rainfall_mm": 0.0
+                }
+                res = requests.post(f"{API_BASE}/api/manual-trigger", json=override_payload).json()
+                eval_res = res.get("evaluation", {})
+                if eval_res.get("status") == "HELD_PHYSICAL_DIVERGENCE_AUDIT":
+                    st.warning("🛑 AUDIT HOLD ACTIVATED: Ingestion engine flagged physical divergence!")
+                    st.write(f"Reason: {eval_res.get('reason')}")
+                else:
+                    st.json(eval_res)
+            except Exception as e:
+                st.error(f"Error: {e}")
 
 # -------------------------------------------------------------
-# AUDIT TRAIL & CLAIMS LEDGER
+# TAB 4: SIMULATED CLAIMS & AUDIT LEDGER
 # -------------------------------------------------------------
-c_audit, c_claims = st.columns([1, 1])
+with tab_claims:
+    st.subheader("📑 Parametric Claims & Cryptographic Audit Ledger")
+    st.caption("Demonstration ledger: Every event binds on-plot telemetry, SECP256k1 key verification, and meteorological cross-checks.")
 
-with c_audit:
-    st.subheader("🛡️ Cryptographic & Anti-Fraud Security Audit Trail")
-    st.caption("Immutable ledger of all received telemetry packets, ECDSA signature status, and satellite verification results.")
-    if audit_data:
-        audit_rows = []
-        for a in audit_data[:12]:
-            audit_rows.append({
-                "Timestamp": datetime.fromtimestamp(a.get("timestamp", time.time())).strftime("%H:%M:%S"),
-                "Node ID": a.get("node_id", "N/A"),
-                "Plot ID": a.get("plot_id", "").upper(),
-                "ECDSA Sig": "✅ VALID" if a.get("sig_valid") else "❌ TAMPERED",
-                "Satellite Match": a.get("satellite_status", "MATCHED"),
-                "Moisture": f"{a.get('moisture', 0):.1f}%",
-                "Verdict": a.get("action", "NORMAL")
-            })
-        st.dataframe(pd.DataFrame(audit_rows), use_container_width=True, hide_index=True)
-    else:
-        st.info("No security audit records logged yet.")
-
-with c_claims:
-    st.subheader("📑 Parametric Claims Disbursed Ledger")
-    st.caption("Automated instant settlements executed via parametric smart trigger.")
+    st.markdown("#### 📜 Generated Claim Intents (Simulated Parametric Micro-Riders)")
     if claims_data:
-        claim_rows = []
-        for c in claims_data[:12]:
-            claim_rows.append({
-                "Claim ID": c.get("claim_id", ""),
-                "Farmer": c.get("farmer_name", ""),
-                "Crop": c.get("crop", ""),
-                "Payout": f"₹{c.get('payout_amount', 0):,.0f}",
-                "Trigger": c.get("trigger_reason", ""),
-                "Status": c.get("status", "SETTLED")
-            })
-        st.dataframe(pd.DataFrame(claim_rows), use_container_width=True, hide_index=True)
+        df_claims = pd.DataFrame(claims_data)
+        display_cols = ["claim_id", "plot_id", "farmer_name", "crop", "state", "payout_calculated_inr", "trigger_reason", "assessment_status", "settlement_status"]
+        valid_cols = [c for c in display_cols if c in df_claims.columns]
+        st.dataframe(df_claims[valid_cols], use_container_width=True)
     else:
-        st.info("No claims triggered yet. All plots currently within baseline parametric thresholds.")
+        st.info("No parametric breach claims generated yet. Trigger a scenario from Godot or Tab 3.")
 
-st.markdown("---")
-f1, f2, f3 = st.columns([1, 2, 1])
-with f1:
-    st.caption("🌾 AgriSentinel Platform v2.0 Enterprise")
-with f2:
-    st.caption("Architecture: FastAPI Microservices + SECP256k1 Curve + NASA/OWM Remote Sensing + Twilio Regional Voice + Groq LLaMA-3.3")
-with f3:
-    st.caption("Ready for Hackathon Grand Jury Demonstration")
+    st.markdown("#### 🔒 Cryptographic Audit Trail")
+    if audit_data:
+        df_audit = pd.DataFrame(audit_data)
+        display_audit_cols = ["log_id", "node_id", "plot_id", "crypto_status", "weather_status", "soil_moisture", "temperature", "notes"]
+        valid_audit_cols = [c for c in display_audit_cols if c in df_audit.columns]
+        st.dataframe(df_audit[valid_audit_cols], use_container_width=True)
+    else:
+        st.info("Audit log is currently empty.")
+
+# -------------------------------------------------------------
+# TAB 5: INSURER UNIT ECONOMICS & LATE-PENALTY SAVINGS
+# -------------------------------------------------------------
+with tab_roi:
+    st.subheader("💰 Insurer Business Model & ROI Calculator")
+    st.caption("Why insurers finance the ₹1,200 AgriSentinel edge nodes instead of passing costs to farmers.")
+
+    st.markdown("""
+    Under PMFBY guidelines, insurers face a statutory **12% annual interest penalty** for claim delays exceeding statutory benchmarks,
+    alongside spending **₹400–₹800 per hectare** on dispute-ridden manual Crop Cutting Experiments (CCEs).
+    """)
+
+    c_calc1, c_calc2 = st.columns([1, 1])
+    with c_calc1:
+        insured_hectares = st.slider("Insured Farm Area (Hectares):", min_value=100, max_value=50000, value=5000, step=500)
+        cce_cost_per_ha = st.slider("Average Manual CCE & Surveyor Cost (₹/ha):", min_value=200, max_value=1200, value=600, step=50)
+        disputed_claims_pct = st.slider("Historical Disputed / Delayed Claim Rate (%):", min_value=5, max_value=40, value=18, step=1)
+        node_cost = 1200.0  # ₹1,200 target BOM per node
+
+    with c_calc2:
+        total_nodes = int(insured_hectares / 2)  # Assuming 1 node per 2-hectare cluster
+        capex_investment = total_nodes * node_cost
+        cce_savings = insured_hectares * cce_cost_per_ha * 0.75  # 75% reduction in manual CCE disputes
+        penalty_avoidance = (insured_hectares * 25000 * (disputed_claims_pct / 100)) * 0.12  # 12% statutory penalty avoidance
+        total_annual_savings = cce_savings + penalty_avoidance
+        payback_months = (capex_investment / total_annual_savings) * 12
+
+        st.markdown(f"""
+        <div style="background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:10px; padding:20px;">
+            <div style="font-size:14px; text-transform:uppercase; color:#64748b; font-weight:700;">Financial Feasibility Model</div>
+            <div style="margin-top:12px; font-size:15px;">
+                • Total Hardware Investment ({total_nodes:,} nodes @ ₹1,200): <b>₹{capex_investment:,.0f}</b><br>
+                • Manual CCE Survey Cost Savings: <b>₹{cce_savings:,.0f}/year</b><br>
+                • 12% Statutory Late-Penalty Avoidance: <b>₹{penalty_avoidance:,.0f}/year</b><br>
+                • <b>Total Insurer Annual Savings:</b> <span style="color:#16a34a; font-weight:800; font-size:18px;">₹{total_annual_savings:,.0f}</span>
+            </div>
+            <div style="margin-top:16px; background:#dcfce7; padding:12px; border-radius:8px; border:1px solid #86efac;">
+                <b style="color:#166534; font-size:16px;">⏱️ Payback Period: {payback_months:.1f} Months</b>
+                <div style="font-size:12px; color:#14532d; margin-top:2px;">
+                    The hardware deployment fully pays for itself in less than one full Kharif-Rabi cropping cycle.
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
