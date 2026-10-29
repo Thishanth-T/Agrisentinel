@@ -300,8 +300,13 @@ tab_cockpit, tab_basis_risk, tab_antifraud, tab_claims, tab_roi = st.tabs([
 # TAB 1: 9 REGIONAL FARM PROFILES
 # -------------------------------------------------------------
 with tab_cockpit:
-    st.subheader("9 Calibrated Regional Farm Profiles Across India")
-    st.caption("Each farm is bound to a registered SECP256k1 hardware node measuring on-plot micro-climate telemetry.")
+    c_head, c_btn = st.columns([3, 1])
+    with c_head:
+        st.subheader("9 Calibrated Regional Farm Profiles Across India")
+        st.caption("Each farm is bound to a registered SECP256k1 hardware node measuring on-plot micro-climate telemetry.")
+    with c_btn:
+        if st.button("🔄 Refresh Live Telemetry", use_container_width=True):
+            st.rerun()
 
     cols = st.columns(3)
     for i, farm in enumerate(grid_data):
@@ -361,6 +366,16 @@ with tab_cockpit:
 
     with col_adv_right:
         st.markdown("**📞 2G Regional Voice Call Test**")
+        curr_farm = next((p for p in grid_data if p['plot_id'] == selected_pid), {})
+        st.markdown(f"""
+        <div style="background:#f1f5f9; border-radius:8px; padding:10px; margin-bottom:10px; font-size:12px; border:1px solid #cbd5e1; color:#0f172a !important;">
+            <b style="color:#0f172a !important;">Broadcast Target ({selected_pid.upper()} - {curr_farm.get('farmer_name')}):</b><br>
+            • Soil Moisture: <b style="color:#0f172a !important;">{curr_farm.get('soil_moisture', 0.0):.1f}%</b><br>
+            • Temperature: <b style="color:#0f172a !important;">{curr_farm.get('temperature', 0.0):.1f}°C</b><br>
+            • Plot Status: <b style="color:#0f172a !important;">{curr_farm.get('status', 'NORMAL')}</b><br>
+            • Max Cover Insured: <b style="color:#0f172a !important;">₹{curr_farm.get('sum_insured_inr', 0):,.0f}</b>
+        </div>
+        """, unsafe_allow_html=True)
         target_phone = st.text_input("Destination Farmer Mobile:", value="+919363849952")
         if st.button("📲 Dispatch Outbound Voice Alert"):
             try:

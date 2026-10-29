@@ -286,6 +286,8 @@ func _load_scenario(moist: float, temp: float, rain: float, spoof: bool):
 	else:
 		_log("[ARMED] Nominal agronomic baseline armed.")
 
+	_on_send_pressed()
+
 func _on_reset_pressed():
 	_log("[RESET] Requesting full backend state reset...")
 	var http_reset = HTTPRequest.new()
