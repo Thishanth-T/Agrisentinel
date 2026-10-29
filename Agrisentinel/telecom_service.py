@@ -35,29 +35,36 @@ class TelecomVoiceEngine:
         """Generates standard TwiML voice XML with speech message and dual-tone keypad response."""
         response = VoiceResponse()
         
-        # Regional language speech alert
+        plot_num = plot_id.replace("plot_", "").replace("_", " ")
+        clean_plot_name = f"Plot {plot_num}"
+
+        # Regional language speech alert & appropriate TTS engine
+        # Note: Amazon Polly does not support Tamil (ta-IN); Google TTS voices must be used for Tamil.
         if language.startswith("ta"):
+            voice_engine = "Google.ta-IN-Standard-C"
             msg = (
                 f"வணக்கம். இது அக்ரி சென்டினல் அவசர அறிவிப்பு. "
-                f"நிலம் {plot_id} இல் தீவிர வறட்சி அல்லது தீவிர வானிலை மாற்றங்கள் பதிவாகியுள்ளது. "
+                f"உங்கள் நிலம் எண் {plot_num} இல் தீவிர வறட்சி அல்லது வானிலை மாற்றம் பதிவாகியுள்ளது. "
                 f"மண்ணின் ஈரப்பதம் {moisture:.1f} சதவீதம் மட்டுமே உள்ளது. "
-                f"மதிப்பிடப்பட்ட இழப்பீடு {payout_amount:.0f} ரூபாய் உரிமைகோரல் ஆவணம் பதிவு செய்யப்பட்டுள்ளது."
+                f"மதிப்பிடப்பட்ட இழப்பீடு {payout_amount:.0f} ரூபாய் உரிமைகோரல் பதிவு செய்யப்பட்டுள்ளது."
             )
         elif language.startswith("hi"):
+            voice_engine = "Polly.Aditi"
             msg = (
                 f"नमस्ते। यह एग्री सेंटिनल आपातकालीन चेतावनी है। "
-                f"आपके खेत {plot_id} पर अत्यधिक मौसम या सूखा दर्ज किया गया है। "
+                f"आपके खेत संख्या {plot_num} पर अत्यधिक मौसम या सूखा दर्ज किया गया है। "
                 f"मिट्टी की नमी {moisture:.1f} प्रतिशत है। "
-                f"अनुमानित दावा दस्तावेज तैयार कर लिया गया है।"
+                f"अनुमानित दावा {payout_amount:.0f} रुपये दर्ज कर लिया गया है।"
             )
         else:
+            voice_engine = "Polly.Aditi"
             msg = (
-                f"Alert from AgriSentinel. Parametric weather breach detected on Plot {plot_id}. "
+                f"Alert from AgriSentinel. Parametric weather breach detected on {clean_plot_name}. "
                 f"Current soil moisture is {moisture:.1f} percent. "
                 f"Simulated parametric claim intent of {payout_amount:.0f} rupees has been recorded."
             )
 
-        response.say(msg, voice="Polly.Aditi", language=language)
+        response.say(msg, voice=voice_engine, language=language)
         
         is_public = bool(
             webhook_base_url and 
@@ -69,6 +76,8 @@ class TelecomVoiceEngine:
         else:
             gather = Gather(num_digits=1)
 
+        if language.startswith("ta"):
+            gather.say("ரசீதை உறுதிப்படுத்த எண் ஒன்றை அழுத்தவும். ஆலோசனை பெற எண் இரண்டை அழுத்தவும்.", voice="Google.ta-IN-Standard-C", language="ta-IN")
         gather.say("Press 1 to confirm receipt. Press 2 to request emergency agronomist advisory.", language="en-IN")
         response.append(gather)
         response.say("Automated AgriSentinel plot monitoring remains active. Thank you and goodbye.")
@@ -144,6 +153,7 @@ class TelecomVoiceEngine:
             )
 
             if not is_public_url:
+                # Encode TwiML for Twilio's official echo utility (stays well under the 2,000 char URL limit)
                 encoded_twiml = urllib.parse.quote(twiml_preview)
                 voice_url = f"https://twimlets.com/echo?Twiml={encoded_twiml}"
 
