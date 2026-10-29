@@ -31,7 +31,7 @@ class TelecomVoiceEngine:
         }
 
     @staticmethod
-    def generate_breach_twiml(plot_id: str, moisture: float, payout_amount: float, language: str = "ta-IN") -> str:
+    def generate_breach_twiml(plot_id: str, moisture: float, payout_amount: float, language: str = "ta-IN", webhook_base_url: Optional[str] = None) -> str:
         """Generates standard TwiML voice XML with speech message and dual-tone keypad response."""
         response = VoiceResponse()
         
@@ -59,10 +59,19 @@ class TelecomVoiceEngine:
 
         response.say(msg, voice="Polly.Aditi", language=language)
         
-        gather = Gather(num_digits=1, action="/api/twilio/gather", method="POST")
+        is_public = bool(
+            webhook_base_url and 
+            ("http://" in webhook_base_url or "https://" in webhook_base_url) and 
+            not any(h in webhook_base_url for h in ["localhost", "127.0.0.1"])
+        )
+        if is_public:
+            gather = Gather(num_digits=1, action=f"{webhook_base_url}/api/twilio/gather", method="POST")
+        else:
+            gather = Gather(num_digits=1)
+
         gather.say("Press 1 to confirm receipt. Press 2 to request emergency agronomist advisory.", language="en-IN")
         response.append(gather)
-        response.say("No input detected. AgriSentinel plot monitoring remains active. Goodbye.")
+        response.say("Automated AgriSentinel plot monitoring remains active. Thank you and goodbye.")
         return str(response)
 
     @staticmethod
@@ -102,7 +111,7 @@ class TelecomVoiceEngine:
         final_from = from_phone or env_creds["phone_number"]
 
         # Generate the TwiML content for reference / simulation
-        twiml_preview = cls.generate_breach_twiml(plot_id, moisture, payout_amount, language_code)
+        twiml_preview = cls.generate_breach_twiml(plot_id, moisture, payout_amount, language_code, webhook_base_url=webhook_base_url)
 
         # Simulation mode if not configured
         if not (final_sid and final_token and final_from and to_phone):
@@ -122,27 +131,45 @@ class TelecomVoiceEngine:
             import asyncio
             client = Client(final_sid, final_token)
             
-            # Use custom_url or build webhook URL pointing to this server
+            # Twilio Cloud cannot access private/local URLs like http://localhost:8000.
+            # If a public webhook URL is not explicitly configured, pass inline TwiML directly.
             voice_url = custom_url or os.getenv("TWILIO_VOICE_URL")
-            if not voice_url:
-                voice_url = f"{webhook_base_url}/api/twilio/voice?plot_id={plot_id}&moisture={moisture}&amount={payout_amount}"
-
-            call = await asyncio.wait_for(
-                asyncio.to_thread(
-                    client.calls.create,
-                    to=to_phone,
-                    from_=final_from,
-                    url=voice_url
-                ),
-                timeout=4.0
+            is_public_url = bool(
+                voice_url and 
+                ("http://" in voice_url or "https://" in voice_url) and 
+                not any(h in voice_url for h in ["localhost", "127.0.0.1"])
             )
+
+            if is_public_url:
+                call = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        client.calls.create,
+                        to=to_phone,
+                        from_=final_from,
+                        url=voice_url
+                    ),
+                    timeout=10.0
+                )
+                voice_source = voice_url
+            else:
+                call = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        client.calls.create,
+                        to=to_phone,
+                        from_=final_from,
+                        twiml=twiml_preview
+                    ),
+                    timeout=10.0
+                )
+                voice_source = "DIRECT_INLINE_TWIML"
+
             return {
                 "status": "QUEUED",
                 "mode": "LIVE_TWILIO_DISPATCH",
                 "call_sid": call.sid,
                 "to_phone": to_phone,
                 "language": language_code,
-                "voice_url_used": voice_url
+                "voice_url_used": voice_source
             }
         except Exception as e:
             # Mask error string to ensure credentials are never exposed
