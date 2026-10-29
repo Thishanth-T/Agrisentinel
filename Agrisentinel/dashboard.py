@@ -100,6 +100,15 @@ st.markdown("""
         letter-spacing: 0.5px;
     }
 
+    .metric-card, .farm-card, .basis-card {
+        color: #0f172a !important;
+    }
+    .farm-card b, .farm-card div, .farm-card span, .farm-card p,
+    .metric-card b, .metric-card div, .metric-card span,
+    .basis-card b, .basis-card p, .basis-card div {
+        color: #0f172a;
+    }
+
     .farm-card {
         background: #ffffff;
         border-radius: 10px;
@@ -154,7 +163,7 @@ st.markdown("""
     }
     .tag-crypto-ok {
         background: #dcfce7;
-        color: #166534;
+        color: #166534 !important;
         padding: 2px 8px;
         border-radius: 12px;
         font-size: 11px;
@@ -163,7 +172,7 @@ st.markdown("""
     }
     .tag-crypto-fail {
         background: #fee2e2;
-        color: #991b1b;
+        color: #991b1b !important;
         padding: 2px 8px;
         border-radius: 12px;
         font-size: 11px;
@@ -308,23 +317,23 @@ with tab_cockpit:
 
         with cols[col_idx]:
             st.markdown(f"""
-            <div class="{card_class}">
+            <div class="{card_class}" style="color:#0f172a !important;">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <b style="font-size:15px;">{farm['plot_id'].upper()}: {farm['farmer_name']}</b>
-                    <span style="font-size:11px; background:#e2e8f0; padding:2px 6px; border-radius:10px; font-weight:600;">{farm['node_id']}</span>
+                    <b style="font-size:15px; color:#0f172a !important;">{farm['plot_id'].upper()}: {farm['farmer_name']}</b>
+                    <span style="font-size:11px; background:#e2e8f0; color:#1e293b !important; padding:2px 6px; border-radius:10px; font-weight:600;">{farm['node_id']}</span>
                 </div>
-                <div style="font-size:12px; color:#475569; margin:3px 0 8px 0;">
-                    🌾 <b>{farm['crop']}</b> | 📍 {farm['district']}, {farm['state']}
+                <div style="font-size:12px; color:#475569 !important; margin:3px 0 8px 0;">
+                    🌾 <b style="color:#1e293b !important;">{farm['crop']}</b> | 📍 {farm['district']}, {farm['state']}
                 </div>
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px; font-size:12px; background:rgba(0,0,0,0.02); padding:8px; border-radius:6px;">
-                    <div>💧 Moisture: <b>{farm['soil_moisture']:.1f}%</b></div>
-                    <div>🌡️ Temp: <b>{farm['temperature']:.1f}°C</b></div>
-                    <div>🌧️ Rainfall: <b>{farm['rainfall_mm']:.1f} mm</b></div>
-                    <div>🛡️ Cover: <b>₹{farm['sum_insured_inr']:,.0f}</b></div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px; font-size:12px; background:#f8fafc; padding:8px; border-radius:6px; border:1px solid #e2e8f0;">
+                    <div style="color:#1e293b !important;">💧 Moisture: <b style="color:#0f172a !important;">{farm['soil_moisture']:.1f}%</b></div>
+                    <div style="color:#1e293b !important;">🌡️ Temp: <b style="color:#0f172a !important;">{farm['temperature']:.1f}°C</b></div>
+                    <div style="color:#1e293b !important;">🌧️ Rainfall: <b style="color:#0f172a !important;">{farm['rainfall_mm']:.1f} mm</b></div>
+                    <div style="color:#1e293b !important;">🛡️ Cover: <b style="color:#0f172a !important;">₹{farm['sum_insured_inr']:,.0f}</b></div>
                 </div>
-                <div style="margin-top:8px; font-size:11px; display:flex; justify-content:space-between;">
+                <div style="margin-top:8px; font-size:11px; display:flex; justify-content:space-between; align-items:center;">
                     <span class="{'tag-crypto-ok' if 'VALID' in farm['crypto_status'] else 'tag-crypto-fail'}">{farm['crypto_status']}</span>
-                    <span style="color:#64748b; font-weight:600;">{farm['status']}</span>
+                    <span style="color:#475569 !important; font-weight:700;">{farm['status']}</span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -360,7 +369,14 @@ with tab_cockpit:
                     json={"plot_id": selected_pid, "phone_number": target_phone},
                     timeout=5
                 ).json()
-                st.json(voice_res)
+                if voice_res.get("status") == "QUEUED":
+                    st.success(f"📞 Live call queued via Twilio to {target_phone} (Call SID: {voice_res.get('call_sid')})")
+                elif voice_res.get("status") == "SIMULATED_VOICE_DISPATCH":
+                    st.info("🎙️ Call Verified in Simulation Mode. Regional TwiML IVR generated.")
+                else:
+                    st.warning("⚠️ Live Twilio dispatch not active (trial token invalid/expired). Showing generated regional TwiML voice payload below:")
+                with st.expander("📜 Preview TwiML Voice XML Webhook Payload", expanded=True):
+                    st.code(voice_res.get("twiml_preview", ""), language="xml")
             except Exception as e:
                 st.error(f"Voice dispatch failed: {e}")
 
