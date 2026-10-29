@@ -131,8 +131,11 @@ class TelecomVoiceEngine:
             import asyncio
             client = Client(final_sid, final_token)
             
+            import urllib.parse
+
             # Twilio Cloud cannot access private/local URLs like http://localhost:8000.
-            # If a public webhook URL is not explicitly configured, pass inline TwiML directly.
+            # Free trial Twilio accounts also restrict the direct 'twiml' parameter on Calls.json.
+            # We use Twilio's official twimlets.com/echo utility when no public URL is configured.
             voice_url = custom_url or os.getenv("TWILIO_VOICE_URL")
             is_public_url = bool(
                 voice_url and 
@@ -140,28 +143,19 @@ class TelecomVoiceEngine:
                 not any(h in voice_url for h in ["localhost", "127.0.0.1"])
             )
 
-            if is_public_url:
-                call = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        client.calls.create,
-                        to=to_phone,
-                        from_=final_from,
-                        url=voice_url
-                    ),
-                    timeout=10.0
-                )
-                voice_source = voice_url
-            else:
-                call = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        client.calls.create,
-                        to=to_phone,
-                        from_=final_from,
-                        twiml=twiml_preview
-                    ),
-                    timeout=10.0
-                )
-                voice_source = "DIRECT_INLINE_TWIML"
+            if not is_public_url:
+                encoded_twiml = urllib.parse.quote(twiml_preview)
+                voice_url = f"https://twimlets.com/echo?Twiml={encoded_twiml}"
+
+            call = await asyncio.wait_for(
+                asyncio.to_thread(
+                    client.calls.create,
+                    to=to_phone,
+                    from_=final_from,
+                    url=voice_url
+                ),
+                timeout=10.0
+            )
 
             return {
                 "status": "QUEUED",
@@ -169,7 +163,7 @@ class TelecomVoiceEngine:
                 "call_sid": call.sid,
                 "to_phone": to_phone,
                 "language": language_code,
-                "voice_url_used": voice_source
+                "voice_url_used": voice_url
             }
         except Exception as e:
             # Mask error string to ensure credentials are never exposed
