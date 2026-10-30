@@ -458,21 +458,34 @@ st.markdown("""<div class="top-hero-card">
 </div>
 </div>""", unsafe_allow_html=True)
 
-# Fetch backend state
-try:
-    grid_res = requests.get(f"{API_BASE}/api/grid", timeout=3).json()
-    claims_res = requests.get(f"{API_BASE}/api/claims", timeout=3).json()
-    audit_res = requests.get(f"{API_BASE}/api/audit", timeout=3).json()
-    basis_res = requests.get(f"{API_BASE}/api/basis-risk-comparison", timeout=3).json()
-    
-    grid_data = grid_res.get("grid", [])
-    claims_data = claims_res.get("claims", [])
-    audit_data = audit_res.get("audit_log", [])
-    tamper_blocked_count = grid_res.get("tamper_attempts_blocked", 0)
-except Exception as e:
+# Fetch backend state with automatic startup retry tolerance
+def fetch_backend_state(max_retries=5, delay=1.0):
+    for attempt in range(max_retries):
+        try:
+            g = requests.get(f"{API_BASE}/api/grid", timeout=3).json()
+            c = requests.get(f"{API_BASE}/api/claims", timeout=3).json()
+            a = requests.get(f"{API_BASE}/api/audit", timeout=3).json()
+            b = requests.get(f"{API_BASE}/api/basis-risk-comparison", timeout=3).json()
+            return g, c, a, b
+        except Exception:
+            if attempt < max_retries - 1:
+                time.sleep(delay)
+            else:
+                return None, None, None, None
+
+grid_res, claims_res, audit_res, basis_res = fetch_backend_state()
+
+if not grid_res:
     st.error(f"⚠️ Cannot connect to AgriSentinel Backend at `{API_BASE}`.")
-    st.info("Start the FastAPI backend: `python -m uvicorn backend:app --host 127.0.0.1 --port 8000 --reload`")
+    st.info("Waiting for FastAPI backend to finish booting. Click 'Retry Connection' below:")
+    if st.button("🔄 Retry Connection"):
+        st.rerun()
     st.stop()
+
+grid_data = grid_res.get("grid", [])
+claims_data = claims_res.get("claims", [])
+audit_data = audit_res.get("audit_log", [])
+tamper_blocked_count = grid_res.get("tamper_attempts_blocked", 0)
 
 # TOP KPI METRICS (Fyntra & EnerSol modern cards)
 total_farms = len(grid_data)
