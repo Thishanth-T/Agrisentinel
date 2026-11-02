@@ -18,6 +18,7 @@ import sqlite3
 import json
 import time
 import hashlib
+from contextlib import contextmanager
 from typing import Dict, List, Any, Optional, Tuple
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agrisentinel.db")
@@ -172,11 +173,15 @@ class Database:
         self.db_path = db_path
         self._init_db()
 
-    def get_connection(self) -> sqlite3.Connection:
+    @contextmanager
+    def get_connection(self):
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON;")
-        return conn
+        try:
+            yield conn
+        finally:
+            conn.close()
 
     def _init_db(self):
         with self.get_connection() as conn:

@@ -21,6 +21,7 @@ from farm_registry import (
     get_registered_device,
     get_farm_profile
 )
+from database import db
 
 class CryptoEngine:
     CURVE = ecdsa.SECP256k1
@@ -37,6 +38,13 @@ class CryptoEngine:
         """Clears replay cache for demo reset operations."""
         cls._seen_digests.clear()
         cls._latest_device_timestamp.clear()
+        try:
+            with db.get_connection() as conn:
+                conn.execute("DELETE FROM telemetry_archive")
+                conn.execute("UPDATE device_state SET latest_sequence = 0, latest_timestamp = 0.0")
+                conn.commit()
+        except Exception:
+            pass
 
     @classmethod
     def canonicalize(cls, data: Dict[str, Any]) -> bytes:
@@ -136,6 +144,12 @@ class CryptoEngine:
         if assigned_plot_id != claimed_plot_id:
             verification_metadata["failure_stage"] = "DEVICE_PLOT_MISMATCH"
             return False, f"Impersonation Rejected: Device '{node_id}' is provisioned for '{assigned_plot_id}', not '{claimed_plot_id}'", verification_metadata
+        
+        # 3b. Verify inner telemetry payload plot_id matches outer authenticated claimed_plot_id
+        inner_plot_id = telemetry_dict.get("plot_id")
+        if inner_plot_id and inner_plot_id != claimed_plot_id:
+            verification_metadata["failure_stage"] = "DEVICE_PLOT_MISMATCH"
+            return False, f"Impersonation Rejected: Payload inner plot_id '{inner_plot_id}' differs from claimed outer plot_id '{claimed_plot_id}'", verification_metadata
         verification_metadata["plot_binding_valid"] = True
 
         # 4. Freshness check
@@ -166,7 +180,31 @@ class CryptoEngine:
             verification_metadata["failure_stage"] = "REPLAY_DETECTED"
             return False, "Replay Attack Blocked: Exact duplicate signed telemetry digest was previously ingested", verification_metadata
 
+        # Persistent replay defense across backend restarts via SQLite
+        try:
+            with db.get_connection() as conn:
+                existing_digest = conn.execute(
+                    "SELECT id FROM telemetry_archive WHERE digest_hex = ?", (digest_hex,)
+                ).fetchone()
+                if existing_digest:
+                    cls._seen_digests.add(replay_key)
+                    verification_metadata["failure_stage"] = "REPLAY_DETECTED"
+                    return False, "Replay Attack Blocked: Duplicate signed telemetry digest found in persistent archive", verification_metadata
+        except Exception:
+            pass
+
         last_time = cls._latest_device_timestamp.get(node_id, 0.0)
+        if last_time == 0.0:
+            try:
+                with db.get_connection() as conn:
+                    st_row = conn.execute(
+                        "SELECT latest_timestamp FROM device_state WHERE device_id = ?", (node_id,)
+                    ).fetchone()
+                    if st_row and st_row["latest_timestamp"]:
+                        last_time = float(st_row["latest_timestamp"])
+                        cls._latest_device_timestamp[node_id] = last_time
+            except Exception:
+                pass
         # Packet cannot be older than the device's last accepted reading by more than 1 second (jitter allowance)
         if enforce_freshness and pkt_timestamp < (last_time - 1.0):
             verification_metadata["failure_stage"] = "RETROGRADE_TIMESTAMP"
@@ -194,8 +232,19 @@ class CryptoEngine:
 
         # Accepted! Update replay cache and device sequence
         verification_metadata["signature_valid"] = True
+        verification_metadata["digest_hex"] = digest_hex
+        verification_metadata["signature_hex"] = signature_hex
         cls._seen_digests.add(replay_key)
         cls._latest_device_timestamp[node_id] = max(last_time, pkt_timestamp)
+        try:
+            with db.get_connection() as conn:
+                conn.execute(
+                    "UPDATE device_state SET latest_timestamp = ?, last_seen = ? WHERE device_id = ?",
+                    (max(last_time, pkt_timestamp), now, node_id)
+                )
+                conn.commit()
+        except Exception:
+            pass
 
         return True, "ECDSA SECP256k1 device signature verified against trusted registry", verification_metadata
 

@@ -250,6 +250,7 @@ class TestInsuranceEngineWorkflow:
     def test_parametric_breach_generates_claim_intent(self):
         """A valid breach generates a simulated Claim Intent with clear settlement disclaimers."""
         engine = ParametricInsuranceEngine()
+        engine.reset_system()
         plot_id = "plot_1"
         node_id = "node_1"
 

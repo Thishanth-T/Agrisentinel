@@ -110,11 +110,49 @@ class ParametricInsuranceEngine:
                 "last_evidence_package": None
             }
 
+        # Restore claims, audit log, and latest plot telemetry from persistent SQLite
+        try:
+            with db.get_connection() as conn:
+                claims_rows = conn.execute("SELECT * FROM claims ORDER BY timestamp DESC").fetchall()
+                self.claims = [dict(r) for r in claims_rows]
+                
+                audit_rows = conn.execute("SELECT * FROM audit_log ORDER BY id DESC").fetchall()
+                self.audit_log = [dict(r) for r in audit_rows]
+
+                # Restore latest telemetry per plot if present
+                for pid in self.plot_telemetry:
+                    t_row = conn.execute(
+                        "SELECT * FROM telemetry_archive WHERE plot_id = ? ORDER BY timestamp DESC LIMIT 1",
+                        (pid,)
+                    ).fetchone()
+                    if t_row:
+                        self.plot_telemetry[pid]["soil_moisture"] = t_row["soil_moisture"]
+                        self.plot_telemetry[pid]["temperature"] = t_row["temperature"]
+                        self.plot_telemetry[pid]["humidity"] = t_row["humidity"]
+                        self.plot_telemetry[pid]["pressure"] = t_row["pressure"]
+                        self.plot_telemetry[pid]["rainfall_mm"] = t_row["rainfall_mm"]
+                        self.plot_telemetry[pid]["battery_level"] = t_row["battery_level"]
+                        self.plot_telemetry[pid]["last_updated"] = t_row["timestamp"]
+                        self.plot_telemetry[pid]["crypto_status"] = "SECP256k1: VERIFIED"
+        except Exception as e:
+            print(f"Error restoring state from database: {e}")
+
     def reset_system(self):
         """Clean demonstration reset across in-memory cache and persistent SQLite."""
         self.tamper_blocked_count = 0
         self.claims.clear()
         self.audit_log.clear()
+
+        try:
+            with db.get_connection() as conn:
+                conn.execute("DELETE FROM claims")
+                conn.execute("DELETE FROM evidence_packages")
+                conn.execute("DELETE FROM telemetry_archive")
+                conn.execute("DELETE FROM audit_log")
+                conn.execute("UPDATE device_state SET latest_sequence = 0, latest_timestamp = 0.0")
+                conn.commit()
+        except Exception as e:
+            print(f"Error resetting database tables: {e}")
 
         # Record demo reset in tamper-evident audit trail
         db.record_audit_event(
@@ -122,7 +160,7 @@ class ParametricInsuranceEngine:
             plot_id=None,
             node_id=None,
             result="SUCCESS",
-            details={"action": "Reset in-memory cache and reinitialized nominal telemetry baseline"}
+            details={"action": "Reset in-memory cache and persistent SQLite tables to nominal baseline"}
         )
 
         self.initialize_state()
@@ -207,15 +245,59 @@ class ParametricInsuranceEngine:
             }
 
         # Check Step 3: Adaptive Device Trust & Spatial-Temporal Evidence Reconciliation
-        device_state = {"battery_level": battery}
+        # Fetch actual historical telemetry from SQLite
+        historical_telemetry = []
+        neighbor_telemetries = []
+        node_active_fault = "NONE"
+        node_lifecycle = "ONLINE"
+        try:
+            with db.get_connection() as conn:
+                hist_rows = conn.execute(
+                    "SELECT * FROM telemetry_archive WHERE plot_id = ? ORDER BY timestamp DESC LIMIT 10", (plot_id,)
+                ).fetchall()
+                historical_telemetry = [dict(r) for r in hist_rows]
+
+                # Fetch latest readings from other 8 plots for spatial comparison
+                neigh_rows = conn.execute(
+                    """
+                    SELECT t.* FROM telemetry_archive t
+                    INNER JOIN (
+                        SELECT plot_id, MAX(timestamp) as max_ts
+                        FROM telemetry_archive
+                        WHERE plot_id != ?
+                        GROUP BY plot_id
+                    ) latest ON t.plot_id = latest.plot_id AND t.timestamp = latest.max_ts
+                    """, (plot_id,)
+                ).fetchall()
+                neighbor_telemetries = [dict(r) for r in neigh_rows]
+
+                # Check device state for faults
+                dev_st = conn.execute("SELECT * FROM device_state WHERE device_id = ?", (node_id,)).fetchone()
+                if dev_st:
+                    node_lifecycle = dev_st["lifecycle_state"]
+        except Exception as e:
+            print(f"Error fetching historical telemetry: {e}")
+
+        # Check virtual node grid for active fault state if present
+        from virtual_node_engine import simulation_grid
+        v_node = simulation_grid.nodes.get(plot_id)
+        if v_node:
+            node_active_fault = v_node.active_fault
+            node_lifecycle = v_node.lifecycle_state
+
+        device_state = {
+            "battery_level": battery,
+            "active_fault": node_active_fault,
+            "lifecycle_state": node_lifecycle
+        }
         trust_score, health_status, trust_reasons = evidence_engine.calculate_device_trust_score(
-            plot_id, telemetry, [], device_state
+            plot_id, telemetry, historical_telemetry, device_state
         )
 
         reconciliation = evidence_engine.reconcile_spatial_temporal_evidence(
             target_plot_id=plot_id,
             target_telemetry=telemetry,
-            neighbor_telemetries=[],
+            neighbor_telemetries=neighbor_telemetries,
             external_weather=weather_corrob.get("reference_data"),
             device_trust_score=trust_score
         )
@@ -229,7 +311,9 @@ class ParametricInsuranceEngine:
         is_heatwave_breach = temperature > heatwave_threshold
         is_flood_breach = rainfall_mm >= flood_threshold
 
-        breach_detected = is_drought_breach or is_heatwave_breach or is_flood_breach
+        # Critical Gate: If device trust is impaired (< 0.6), suppress automatic claim trigger
+        device_unreliable = trust_score < 0.60
+        breach_detected = (is_drought_breach or is_heatwave_breach or is_flood_breach) and not device_unreliable
 
         # Assemble Evidence Package
         evidence_id = f"EVD-{uuid.uuid4().hex[:8].upper()}"

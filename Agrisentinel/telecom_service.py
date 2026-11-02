@@ -14,6 +14,8 @@ from typing import Optional, Dict, Any
 from twilio.rest import Client
 from twilio.twiml.voice_response import VoiceResponse, Gather
 
+_UNSET = object()
+
 class TelecomVoiceEngine:
     @staticmethod
     def get_twilio_credentials() -> Dict[str, Optional[str]]:
@@ -105,9 +107,9 @@ class TelecomVoiceEngine:
         webhook_base_url: str,
         language_code: str = "ta-IN",
         custom_url: Optional[str] = None,
-        account_sid: Optional[str] = None,
-        auth_token: Optional[str] = None,
-        from_phone: Optional[str] = None
+        account_sid: Any = _UNSET,
+        auth_token: Any = _UNSET,
+        from_phone: Any = _UNSET
     ) -> Dict[str, Any]:
         """
         Dispatches voice alert.
@@ -115,9 +117,9 @@ class TelecomVoiceEngine:
         returns validated TwiML preview.
         """
         env_creds = cls.get_twilio_credentials()
-        final_sid = account_sid or env_creds["account_sid"]
-        final_token = auth_token or env_creds["auth_token"]
-        final_from = from_phone or env_creds["phone_number"]
+        final_sid = env_creds["account_sid"] if account_sid is _UNSET else account_sid
+        final_token = env_creds["auth_token"] if auth_token is _UNSET else auth_token
+        final_from = env_creds["phone_number"] if from_phone is _UNSET else from_phone
 
         # Generate the TwiML content for reference / simulation
         twiml_preview = cls.generate_breach_twiml(plot_id, moisture, payout_amount, language_code, webhook_base_url=webhook_base_url)

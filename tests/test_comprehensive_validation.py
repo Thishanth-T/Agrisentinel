@@ -34,6 +34,7 @@ from satellite_verifier import SatelliteVerifier
 class ComprehensiveEngineeringValidation(unittest.TestCase):
     def setUp(self):
         engine.reset_system()
+        simulation_grid.initialize_grid()
 
     def test_01_cryptographic_verification_valid_packet(self):
         """GATE A: SECP256k1 authentic signature accepted."""
@@ -211,6 +212,153 @@ class ComprehensiveEngineeringValidation(unittest.TestCase):
         self.assertTrue(res["triggered"])
         self.assertEqual(res["status"], "PARAMETRIC_BREACH_CLAIM_INTENT_GENERATED")
         self.assertIn("DISBURSEMENT_NOT_CONNECTED", res["claim"]["settlement_status"])
+
+    def test_13_inner_plot_id_tamper_rejected(self):
+        """GATE A: Inner telemetry payload plot_id mismatch rejected even if outer claim matches."""
+        tampered_telemetry = {
+            "plot_id": "plot_2",  # Inner mismatch! Outer is claimed as plot_1
+            "sequence": 15,
+            "timestamp": time.time(),
+            "temperature": 28.5,
+            "humidity": 45.0,
+            "pressure": 1012.0,
+            "soil_moisture": 30.0,
+            "rainfall_mm": 0.0
+        }
+        pkt = CryptoEngine.create_simulated_signed_packet("node_1", tampered_telemetry)
+        valid, notes, meta = CryptoEngine.verify_telemetry_packet(
+            "node_1", "plot_1", pkt["signature"], tampered_telemetry, enforce_freshness=False
+        )
+        self.assertFalse(valid)
+        self.assertEqual(meta["failure_stage"], "DEVICE_PLOT_MISMATCH")
+
+    def test_14_persistent_replay_survives_memory_wipe(self):
+        """GATE A: Persistent replay defense in SQLite detects duplicate digest across restarts."""
+        test_telemetry = {
+            "plot_id": "plot_2",
+            "sequence": 99,
+            "timestamp": time.time(),
+            "temperature": 27.0,
+            "humidity": 50.0,
+            "pressure": 1012.0,
+            "soil_moisture": 33.0,
+            "rainfall_mm": 0.0
+        }
+        pkt = CryptoEngine.create_simulated_signed_packet("node_2", test_telemetry)
+        valid1, notes1, meta1 = CryptoEngine.verify_telemetry_packet(
+            "node_2", "plot_2", pkt["signature"], test_telemetry, enforce_freshness=False
+        )
+        self.assertTrue(valid1)
+
+        # Ingest into insurance engine to persist in SQLite telemetry_archive
+        engine.evaluate_telemetry("node_2", test_telemetry, True, meta1, "")
+
+        # Simulate backend restart by wiping only the in-memory cache
+        CryptoEngine._seen_digests.clear()
+
+        # Replay the exact same packet - persistent SQLite archive must catch it!
+        valid2, notes2, meta2 = CryptoEngine.verify_telemetry_packet(
+            "node_2", "plot_2", pkt["signature"], test_telemetry, enforce_freshness=False
+        )
+        self.assertFalse(valid2)
+        self.assertEqual(meta2["failure_stage"], "REPLAY_DETECTED")
+
+    def test_15_sensor_fault_suppresses_claim_trigger(self):
+        """GATE B & D: Unreliable sensor (trust < 0.60) suppresses automatic parametric claim generation."""
+        # Inject stuck fault on node_1
+        simulation_grid.nodes["plot_1"].inject_fault(VirtualSensorFault.STUCK, target_sensor="soil_moisture", value=10.0)
+        
+        faulty_telemetry = {
+            "plot_id": "plot_1",
+            "sequence": 102,
+            "timestamp": time.time(),
+            "temperature": 32.0,
+            "humidity": 40.0,
+            "pressure": 1012.0,
+            "soil_moisture": 10.0,  # Below drought threshold (18.0)
+            "rainfall_mm": 0.0
+        }
+        pkt = CryptoEngine.create_simulated_signed_packet("node_1", faulty_telemetry)
+        res = engine.evaluate_telemetry("node_1", faulty_telemetry, True, {"registered_public_key": "6502..."}, "")
+        
+        # Must NOT trigger because device trust score is penalized by hardware fault
+        self.assertFalse(res["triggered"])
+        self.assertLess(res["evidence_package"]["device_health"]["trust_score"], 0.60)
+        
+        # Clear fault
+        simulation_grid.nodes["plot_1"].inject_fault(VirtualSensorFault.NONE)
+
+    def test_16_spatial_reconciliation_with_neighbor_autocorrelation(self):
+        """GATE C: Spatial reconciliation aggregates neighbor telemetry for explainable corroboration."""
+        target_telemetry = {"soil_moisture": 12.0, "rainfall_mm": 0.0, "temperature": 42.0}
+        neighbors = [
+            {"plot_id": "plot_2", "soil_moisture": 14.0, "rainfall_mm": 0.0},
+            {"plot_id": "plot_3", "soil_moisture": 15.0, "rainfall_mm": 0.0}
+        ]
+        ext_weather = {"source_name": "Regional AWS", "data_type": "SYNTHETIC_BASELINE", "rain_1h_mm": 0.0}
+        res = evidence_engine.reconcile_spatial_temporal_evidence(
+            "plot_1", target_telemetry, neighbors, ext_weather, device_trust_score=0.9
+        )
+        self.assertEqual(res["reconciliation_outcome"], "CONSISTENT")
+        self.assertTrue(any("Spatial autocorrelation" in ev for ev in res["supporting_evidence"]))
+
+    def test_17_full_end_to_end_demonstration_workflow(self):
+        """GATE E: Complete demonstrated flow from scenario trigger through claim decision and audit."""
+        # 1. Trigger cloudburst on plot 1
+        simulation_grid.trigger_scenario("LOCALISED_CLOUDBURST", "plot_1", intensity=1.0)
+        target_node = simulation_grid.nodes["plot_1"]
+        self.assertGreaterEqual(target_node.rainfall_mm, 70.0)
+
+        # 2. Get signed telemetry
+        pkt = target_node.sample_and_enqueue()
+        target_node.local_packet_queue.clear()
+        
+        # 3. Cryptographic verification
+        sig_valid, notes, meta = CryptoEngine.verify_telemetry_packet(
+            target_node.node_id, "plot_1", pkt["signature"], pkt["telemetry"], enforce_freshness=False
+        )
+        self.assertTrue(sig_valid)
+
+        # 4. Ingestion & Evaluation
+        eval_result = engine.evaluate_telemetry(
+            target_node.node_id, pkt["telemetry"], sig_valid, meta, notes
+        )
+        
+        # 5. Parametric claim generated
+        self.assertTrue(eval_result["triggered"])
+        self.assertEqual(eval_result["claim"]["claim_type"], "FLOOD")
+        self.assertEqual(eval_result["claim"]["plot_id"], "plot_1")
+
+        # 6. Verify persistence in SQLite
+        with db.get_connection() as conn:
+            claim_row = conn.execute("SELECT * FROM claims WHERE plot_id = 'plot_1'").fetchone()
+            self.assertIsNotNone(claim_row)
+            self.assertEqual(claim_row["claim_type"], "FLOOD")
+
+    def test_18_persistence_survives_backend_restart(self):
+        """GATE D: Claims and telemetry survive complete engine instantiation (backend reboot)."""
+        # 1. Generate a claim in the current engine instance
+        drought_telemetry = {
+            "plot_id": "plot_1",
+            "soil_moisture": 10.0,
+            "temperature": 43.0,
+            "rainfall_mm": 0.0,
+            "humidity": 20.0,
+            "pressure": 1012.0
+        }
+        pkt = CryptoEngine.create_simulated_signed_packet("node_1", drought_telemetry)
+        res = engine.evaluate_telemetry("node_1", drought_telemetry, True, {"registered_public_key": "6502..."}, "")
+        self.assertTrue(res["triggered"])
+
+        # 2. Create a new engine instance to simulate a fresh backend startup
+        from insurance_engine import ParametricInsuranceEngine
+        restarted_engine = ParametricInsuranceEngine()
+        
+        # 3. Verify the new engine instance restored the claim from SQLite
+        self.assertGreaterEqual(len(restarted_engine.claims), 1)
+        plot_1_claims = [c for c in restarted_engine.claims if c["plot_id"] == "plot_1"]
+        self.assertTrue(len(plot_1_claims) > 0)
+        self.assertEqual(plot_1_claims[0]["plot_id"], "plot_1")
 
 if __name__ == "__main__":
     unittest.main()

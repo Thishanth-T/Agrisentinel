@@ -98,8 +98,8 @@ class SatelliteVerifier:
         temp_delta = abs(node_temp - ref_temp)
 
         # 1. Suspicious Bucket-Immersion Divergence:
-        # Soil sensor reports saturated flood (>85%) while external station reports 0 rain and clear skies (<20% cloud)
-        if node_moisture >= 85.0 and ref_cloud <= 20.0 and ref_rain <= 1.0 and node_rain <= 2.0:
+        # Soil sensor reports saturated flood (>85%) while external station reports 0 rain and on-plot rain is 0
+        if node_moisture >= 85.0 and ref_rain <= 1.0 and node_rain <= 2.0:
             return {
                 "corroboration_status": "DIVERGENCE_HELD_FOR_INSPECTION",
                 "badge": "AUDIT: DIVERGENCE FLAGGED",
@@ -115,7 +115,7 @@ class SatelliteVerifier:
                 "audit_notes": (
                     f"Physical Divergence on Plot {plot_id.upper()}: Micro-node reports root-zone saturation "
                     f"({node_moisture:.1f}% moisture), but reference weather grid indicates zero rain ({ref_rain:.1f}mm) "
-                    f"and clear sky ({ref_cloud:.0f}% clouds). Claim intent held pending field inspector survey."
+                    f"and on-plot rain gauge indicates no rainfall ({node_rain:.1f}mm). Claim intent held pending field inspector survey."
                 )
             }
 
@@ -161,7 +161,7 @@ class SatelliteVerifier:
             }
 
         # 4. Corroborated Deluge / Heavy Precipitation:
-        if node_rain >= 50.0 or (node_moisture >= 80.0 and (ref_rain > 5.0 or ref_cloud > 60.0)):
+        if node_rain >= 50.0 or (node_moisture >= 80.0 and (ref_rain > 5.0 or (ref_cloud > 60.0 and node_rain >= 20.0))):
             return {
                 "corroboration_status": "CORROBORATED",
                 "badge": "WEATHER: CORROBORATED",
