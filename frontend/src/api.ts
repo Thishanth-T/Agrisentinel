@@ -1,5 +1,5 @@
 /**
- * AgriSentinel API Client
+ * AgriSentinel Comprehensive API Client
  * Connects the React UI to the authoritative FastAPI backend running on http://127.0.0.1:8000
  */
 
@@ -26,9 +26,31 @@ export interface FarmPlot {
   humidity: number;
   pressure: number;
   rainfall_mm: number;
+  battery_level?: number;
+  device_trust_score?: number;
+  reconciliation_outcome?: string;
   status: string;
   crypto_status: string;
   weather_status: string;
+}
+
+export interface VirtualNodeState {
+  plot_id: string;
+  node_id: string;
+  farmer_name: string;
+  crop: string;
+  lifecycle_state: string;
+  is_connected: boolean;
+  battery_level: number;
+  is_solar_charging: boolean;
+  signal_strength_dbm: number;
+  sequence_number: number;
+  queued_packets_count: number;
+  dropped_packets_count: number;
+  active_fault: string;
+  soil_moisture: number;
+  temperature: number;
+  rainfall_mm: number;
 }
 
 export interface BasisRiskData {
@@ -56,6 +78,7 @@ export interface BasisRiskData {
 
 export interface ClaimRecord {
   claim_id: string;
+  evidence_id?: string;
   plot_id: string;
   node_id: string;
   farmer_name: string;
@@ -75,12 +98,53 @@ export interface ClaimRecord {
 }
 
 export interface AuditRecord {
+  id?: number;
   timestamp: number;
-  event: string;
+  event_type?: string;
+  event?: string;
   plot_id: string;
   node_id?: string;
   details?: any;
+  details_json?: string;
   result: string;
+  current_hash?: string;
+  prev_hash?: string;
+}
+
+export interface FarmPassport {
+  farm_profile: any;
+  device_registration: {
+    node_id: string;
+    hardware_model: string;
+    cryptographic_algorithm: string;
+    public_key: string;
+    sensor_suite: string[];
+  };
+  audit_integrity: {
+    is_valid: boolean;
+    verified_records: number;
+    hash_algorithm: string;
+  };
+  recent_telemetry: any[];
+  claims_history: any[];
+  audit_events: any[];
+}
+
+export interface ValidationMetrics {
+  system_status: string;
+  demonstrated_maturity_rating: string;
+  metrics: Array<{
+    name: string;
+    formula: string;
+    measured_value: string;
+    sample_size: number;
+    status: string;
+  }>;
+  database_records: {
+    telemetry_packets_stored: number;
+    claims_recorded: number;
+    audit_events_logged: number;
+  };
 }
 
 export interface AdvisoryData {
@@ -109,6 +173,11 @@ export const api = {
     return res.json();
   },
 
+  async getVirtualNodesState(): Promise<{ nodes: VirtualNodeState[] }> {
+    const res = await fetch(`${API_BASE}/api/nodes/state`);
+    return res.json();
+  },
+
   async getBasisRisk(): Promise<BasisRiskData> {
     const res = await fetch(`${API_BASE}/api/basis-risk-comparison`);
     return res.json();
@@ -124,8 +193,45 @@ export const api = {
     return res.json();
   },
 
+  async getPassport(plotId: string): Promise<FarmPassport> {
+    const res = await fetch(`${API_BASE}/api/passport/${plotId}`);
+    return res.json();
+  },
+
+  async getValidationMetrics(): Promise<ValidationMetrics> {
+    const res = await fetch(`${API_BASE}/api/validation/metrics`);
+    return res.json();
+  },
+
   async getAdvisory(plotId: string): Promise<AdvisoryData> {
     const res = await fetch(`${API_BASE}/api/advisory/${plotId}`);
+    return res.json();
+  },
+
+  async triggerScenario(payload: { scenario: string; plot_id: string; intensity?: number }) {
+    const res = await fetch(`${API_BASE}/api/simulation/scenario`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+
+  async setConnectivity(payload: { plot_id: string; online: boolean }) {
+    const res = await fetch(`${API_BASE}/api/simulation/connectivity`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+
+  async injectFault(payload: { plot_id: string; fault_type: string; target_sensor?: string; value?: number }) {
+    const res = await fetch(`${API_BASE}/api/simulation/fault`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
     return res.json();
   },
 
@@ -160,15 +266,6 @@ export const api = {
   async resetState() {
     const res = await fetch(`${API_BASE}/api/policies/reset`, {
       method: 'POST',
-    });
-    return res.json();
-  },
-
-  async signSimulator(nodeId: string, telemetry: any) {
-    const res = await fetch(`${API_BASE}/api/crypto/sign`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ node_id: nodeId, telemetry }),
     });
     return res.json();
   }
