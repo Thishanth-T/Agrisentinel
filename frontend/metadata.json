@@ -1,0 +1,6 @@
+{
+  "name": "AgriSentinel — Verifiable Agricultural Telemetry",
+  "description": "Agricultural field-monitoring and crop-insurance evidence platform delivering hyper-local, cryptographically verified ground-truth telemetry for parametric underwriting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

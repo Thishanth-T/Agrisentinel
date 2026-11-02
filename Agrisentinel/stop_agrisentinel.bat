@@ -18,8 +18,15 @@ for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":8501 " ^| findstr LI
     taskkill /F /PID %%a >nul 2>&1
 )
 
-:: Kill any remaining python/uvicorn/streamlit orphans from our project
+:: Kill frontend UI (port 3000)
+for /f "tokens=5" %%a in ('netstat -aon 2^>nul ^| findstr ":3000 " ^| findstr LISTENING') do (
+    echo  Killing Frontend UI PID %%a
+    taskkill /F /PID %%a >nul 2>&1
+)
+
+:: Kill remaining window titles
 taskkill /F /FI "WINDOWTITLE eq AgriSentinel Backend" >nul 2>&1
+taskkill /F /FI "WINDOWTITLE eq AgriSentinel Frontend" >nul 2>&1
 taskkill /F /FI "WINDOWTITLE eq AgriSentinel Dashboard" >nul 2>&1
 
 echo.
