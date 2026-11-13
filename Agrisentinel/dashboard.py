@@ -688,7 +688,7 @@ with tab_cockpit:
 <div>• Max Cover: <b style="color:#0f172a;">₹{curr_farm.get('sum_insured_inr', 0):,.0f}</b></div>
 </div>
 </div>""", unsafe_allow_html=True)
-        target_phone = st.text_input("Destination Farmer Mobile (E.164):", value="+919363849952")
+        target_phone = st.text_input("Destination Farmer Mobile (E.164):", value=os.getenv("FARMER_TEST_PHONE", "+919876500001"))
         if st.button("📲 Dispatch Outbound Voice Alert", use_container_width=True):
             try:
                 voice_res = requests.post(

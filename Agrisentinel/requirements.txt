@@ -8,3 +8,5 @@ twilio
 requests
 pydantic
 httpx
+pytest
+pytest-asyncio

@@ -40,5 +40,5 @@ def get_config_summary() -> dict:
         "twilio_configured": bool(os.getenv("TWILIO_ACCOUNT_SID") and os.getenv("TWILIO_AUTH_TOKEN")),
         "groq_configured": bool(os.getenv("GROQ_API_KEY") and not os.getenv("GROQ_API_KEY").startswith("mock")),
         "weather_api_configured": bool(os.getenv("OPENWEATHER_API_KEY") and not os.getenv("OPENWEATHER_API_KEY").startswith("mock")),
-        "farmer_test_phone": os.getenv("FARMER_TEST_PHONE", "+919363849952")
+        "farmer_test_phone": os.getenv("FARMER_TEST_PHONE", "+919876500001")
     }

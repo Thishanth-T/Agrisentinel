@@ -6,6 +6,7 @@ their registered IoT edge devices, SECP256k1 verification keys, and
 calibrated parametric insurance thresholds.
 """
 
+import os
 from typing import Dict, Any, Optional
 
 # SECP256k1 verification keys registered for physical/simulated edge devices.
@@ -105,7 +106,7 @@ FARM_PROFILES: Dict[str, Dict[str, Any]] = {
         "plot_id": "plot_1",
         "assigned_node_id": "node_1",
         "farmer_name": "Murugan K.",
-        "phone": "+919363849952",
+        "phone": os.getenv("FARMER_TEST_PHONE", "+919876500001"),
         "crop": "Paddy",
         "state": "Tamil Nadu",
         "district": "Madurai",

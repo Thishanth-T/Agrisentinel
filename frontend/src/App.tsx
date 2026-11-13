@@ -66,7 +66,7 @@ export default function App() {
   const [scenarioIntensity, setScenarioIntensity] = useState<number>(1.0);
 
   // Voice dispatch inputs
-  const [voicePhone, setVoicePhone] = useState<string>('+919363849952');
+  const [voicePhone, setVoicePhone] = useState<string>('+919876500001');
   const [voiceDispatchResult, setVoiceDispatchResult] = useState<any>(null);
   const [voiceLoading, setVoiceLoading] = useState<boolean>(false);
 
@@ -121,7 +121,7 @@ export default function App() {
     plot_id: 'plot_1',
     node_id: 'node_1',
     farmer_name: 'Murugan K.',
-    phone: '+919363849952',
+    phone: '+919876500001',
     crop: 'Paddy',
     state: 'Tamil Nadu',
     district: 'Madurai',
@@ -1209,7 +1209,7 @@ export default function App() {
                     type="tel"
                     value={voicePhone}
                     onChange={(e) => setVoicePhone(e.target.value)}
-                    placeholder="+919363849952"
+                    placeholder="+919876500001"
                     className="w-full bg-black/60 border border-white/25 p-3 rounded-lg text-sm text-white font-mono focus:outline-none focus:border-white"
                   />
                   <div className="text-[11px] text-white/50 mt-1">

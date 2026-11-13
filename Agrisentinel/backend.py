@@ -6,6 +6,7 @@ meteorological cross-examination, parametric claims evaluation, and voice alerts
 """
 
 import os
+import re
 import time
 from typing import Dict, Any, Optional
 
@@ -36,11 +37,21 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8501",
+        "http://127.0.0.1:8501",
+        "*"
+    ],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Safety cooldown state for rate-limiting destructive/cost-bearing actions
+_last_voice_call_time: float = 0.0
+_last_reset_time: float = 0.0
 
 class TelemetryData(BaseModel):
     plot_id: str = Field(..., example="plot_1")
@@ -71,7 +82,7 @@ class ManualTriggerPayload(BaseModel):
 
 class TriggerVoicePayload(BaseModel):
     plot_id: str = Field(..., example="plot_1")
-    phone_number: str = Field(..., example="+919363849952")
+    phone_number: str = Field(..., example="+919876500001")
     custom_url: Optional[str] = None
     twilio_sid: Optional[str] = None
     twilio_token: Optional[str] = None
@@ -211,6 +222,24 @@ async def get_advisory(plot_id: str, month: str = ""):
 
 @app.post("/api/telecom/trigger-voice")
 async def trigger_voice_call(payload: TriggerVoicePayload, request: Request):
+    global _last_voice_call_time
+    now = time.time()
+    if now - _last_voice_call_time < 3.0:
+        raise HTTPException(
+            status_code=429,
+            detail="Voice dispatch cooldown active. Please wait 3 seconds before initiating another call."
+        )
+
+    # Validate E.164 phone format
+    cleaned_phone = payload.phone_number.strip()
+    if not re.match(r"^\+[1-9]\d{7,14}$", cleaned_phone):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid destination phone number. Must be valid international E.164 format (e.g., +919876500001)."
+        )
+
+    _last_voice_call_time = now
+
     policy = engine.policies.get(payload.plot_id)
     if not policy:
         raise HTTPException(status_code=404, detail=f"Plot {payload.plot_id} not registered")
@@ -222,7 +251,7 @@ async def trigger_voice_call(payload: TriggerVoicePayload, request: Request):
     lang_code = policy.get("language_code", "ta-IN")
 
     dispatch_res = await TelecomVoiceEngine.dispatch_voice_alert(
-        to_phone=payload.phone_number,
+        to_phone=cleaned_phone,
         plot_id=payload.plot_id,
         moisture=moisture,
         payout_amount=amount,
@@ -352,6 +381,12 @@ async def get_audit_log():
 @app.post("/api/policies/reset")
 async def reset_demo_state():
     """Predictable demo reset: clears audit log, claims, and resets replay protection."""
+    global _last_reset_time
+    now = time.time()
+    if now - _last_reset_time < 2.0:
+        return {"status": "cooldown", "message": "Demo reset executed recently; state is already nominal."}
+    _last_reset_time = now
+
     CryptoEngine.reset_replay_cache()
     res = engine.reset_system()
     return res

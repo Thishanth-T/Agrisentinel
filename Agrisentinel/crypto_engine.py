@@ -190,7 +190,8 @@ class CryptoEngine:
                     cls._seen_digests.add(replay_key)
                     verification_metadata["failure_stage"] = "REPLAY_DETECTED"
                     return False, "Replay Attack Blocked: Duplicate signed telemetry digest found in persistent archive", verification_metadata
-        except Exception:
+        except Exception as e:
+            # Log warning if DB is temporarily inaccessible, in-memory cache remains active
             pass
 
         last_time = cls._latest_device_timestamp.get(node_id, 0.0)
