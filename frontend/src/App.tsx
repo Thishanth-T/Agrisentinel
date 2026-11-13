@@ -26,9 +26,12 @@ import {
   WifiOff,
   FileText,
   Sliders,
-  Database
+  Database,
+  Play,
+  Volume2
 } from 'lucide-react';
 import { ScrollCanvas } from './ScrollCanvas';
+import { GuidedDemo } from './GuidedDemo';
 import { 
   api, 
   FarmPlot, 
@@ -37,7 +40,7 @@ import {
   ClaimRecord, 
   AuditRecord, 
   AdvisoryData,
-  FarmPassport,
+  FarmPassport, 
   ValidationMetrics 
 } from './api';
 
@@ -69,6 +72,9 @@ export default function App() {
   const [voicePhone, setVoicePhone] = useState<string>('+919876500001');
   const [voiceDispatchResult, setVoiceDispatchResult] = useState<any>(null);
   const [voiceLoading, setVoiceLoading] = useState<boolean>(false);
+
+  // 3-Minute Hackathon Demo Mode
+  const [isDemoOpen, setIsDemoOpen] = useState<boolean>(false);
 
   // Synchronize full state from FastAPI
   const refreshAllData = async () => {
@@ -239,6 +245,28 @@ export default function App() {
     }
   };
 
+  const handlePlayRegionalAudio = () => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    try {
+      window.speechSynthesis.cancel();
+      let text = `Alert for ${currentPlot.farmer_name}. Parametric crop breach detected in ${currentPlot.district}, ${currentPlot.state}. Policy claim intent recorded for rupees ${currentPlot.sum_insured_inr?.toLocaleString('en-IN')}.`;
+      let lang = 'en-US';
+      if (currentPlot.language_code?.startsWith('ta')) {
+        text = `வணக்கம் ${currentPlot.farmer_name} அவர்களே, உங்கள் ${currentPlot.district} பண்ணையில் தீவிர மழை பதிவாகியுள்ளது. பயிர் காப்பீட்டு இழப்பீடு ரூபாய் ${currentPlot.sum_insured_inr?.toLocaleString('en-IN')} அங்கீகரிக்கப்பட்டுள்ளது.`;
+        lang = 'ta-IN';
+      } else if (currentPlot.language_code?.startsWith('hi')) {
+        text = `नमस्ते ${currentPlot.farmer_name} जी, आपके ${currentPlot.district} खेत में अत्यधिक मौसमी परिवर्तन दर्ज किया गया है। फसल बीमा दावा राशि ${currentPlot.sum_insured_inr?.toLocaleString('en-IN')} रुपये स्वीकृत की गई है।`;
+        lang = 'hi-IN';
+      }
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = lang;
+      utterance.rate = 0.95;
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      console.warn('Speech synthesis error:', e);
+    }
+  };
+
   const downloadPassportJSON = () => {
     if (!passport) return;
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(passport, null, 2));
@@ -297,15 +325,26 @@ export default function App() {
         <div className="relative z-10 w-full flex flex-col justify-between flex-grow px-4 sm:px-8 md:px-16 pt-6 sm:pt-8 pb-8 md:pb-12">
           
           <header className="w-full flex items-center justify-between pt-2">
-            <button 
-              onClick={() => { setActiveTab('overview'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-              className="text-left font-bold text-2xl sm:text-[27px] tracking-[-0.6px] text-white hover:opacity-85 transition-opacity cursor-pointer bg-transparent border-none p-0 flex items-center gap-2 drop-shadow-md"
-            >
-              <span>AgriSentinel</span>
-              <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 ml-2">
-                Engineering v2.1 &bull; 8.2/10 Maturity
-              </span>
-            </button>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => { setActiveTab('overview'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                className="text-left font-bold text-2xl sm:text-[27px] tracking-[-0.6px] text-white hover:opacity-85 transition-opacity cursor-pointer bg-transparent border-none p-0 flex items-center gap-2 drop-shadow-md"
+              >
+                <span>AgriSentinel</span>
+                <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 ml-2">
+                  Engineering v2.1 &bull; 12/12 Automated Gates
+                </span>
+              </button>
+
+              <button
+                onClick={() => setIsDemoOpen(true)}
+                className="hidden xl:flex items-center gap-1.5 px-3 py-1 rounded-full border border-emerald-400/60 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-bold text-[11px] uppercase tracking-wider transition-all cursor-pointer shadow-lg hover:scale-105"
+                title="Launch 3-Minute Hackathon Demo"
+              >
+                <Play className="w-3 h-3 fill-current" />
+                <span>▶ Run 3-Min Demo</span>
+              </button>
+            </div>
 
             {/* Desktop Navigation Tabs */}
             <nav className="hidden lg:flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/20" aria-label="Main Navigation">
@@ -336,8 +375,35 @@ export default function App() {
 
           {/* Middle Interactive Highlight Cards */}
           <div className="w-full flex justify-start my-8 md:my-14 lg:ml-16">
-            <div className="flex flex-col sm:flex-row items-stretch gap-3 w-full max-w-[700px]">
+            <div className="flex flex-col sm:flex-row flex-wrap lg:flex-nowrap items-stretch gap-3 w-full max-w-[960px]">
               
+              <button
+                onClick={() => setIsDemoOpen(true)}
+                className="card-notch-cut bg-gradient-to-br from-emerald-950/70 via-black/80 to-zinc-950/80 hover:from-emerald-900/90 hover:via-black/95 hover:to-zinc-900/95 backdrop-blur-md border border-emerald-400/50 text-white text-left p-5 sm:p-6 w-full sm:w-[220px] flex flex-col justify-between transition-all hover:-translate-y-1 group cursor-pointer focus:outline-none shadow-xl"
+              >
+                <div>
+                  <div className="mb-3 text-emerald-400 flex items-center justify-between">
+                    <Play className="w-5 h-5 fill-current" />
+                    <span className="text-[9px] font-mono uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 animate-pulse">Hackathon</span>
+                  </div>
+                  <h3 className="text-[17px] font-bold leading-tight tracking-[-0.3px] text-white mb-4">
+                    Guided 3-Min<br />Demo Mode
+                  </h3>
+                  <div className="mb-2">
+                    <span className="block text-[9px] font-bold tracking-[1px] uppercase text-white/60 mb-0.5">Narrative</span>
+                    <span className="block text-[11.5px] font-semibold text-emerald-300">7-Step Peril Walkthrough</span>
+                  </div>
+                  <div>
+                    <span className="block text-[9px] font-bold tracking-[1px] uppercase text-white/60 mb-0.5">Live Backends</span>
+                    <span className="block text-[11.5px] font-semibold text-white/90">Real Cryptographic Flow</span>
+                  </div>
+                </div>
+                <div className="pt-4 border-t border-emerald-500/30 flex items-center justify-between text-[11px] font-bold mt-5 text-emerald-300 group-hover:text-white">
+                  <span>Start Demo</span>
+                  <span className="transition-transform group-hover:translate-x-1">&rarr;</span>
+                </div>
+              </button>
+
               <button
                 onClick={() => scrollToTabContent('cockpit')}
                 className="card-notch-cut bg-white/15 hover:bg-white/25 backdrop-blur-md border border-white/30 text-white text-left p-5 sm:p-6 w-full sm:w-[220px] flex flex-col justify-between transition-all hover:-translate-y-1 group cursor-pointer focus:outline-none"
@@ -481,6 +547,15 @@ export default function App() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              <button 
+                onClick={() => setIsDemoOpen(true)}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg border border-emerald-400/50 bg-emerald-500/20 hover:bg-emerald-500/30 text-xs font-bold text-emerald-300 transition-all cursor-pointer shadow-md"
+                title="Launch 3-Minute Hackathon Guided Demo"
+              >
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span>Run Guided Demo</span>
+              </button>
+
               <button 
                 onClick={refreshAllData}
                 disabled={loading}
@@ -1217,7 +1292,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="pt-2 flex items-center gap-3">
+                <div className="pt-2 flex flex-wrap items-center gap-3">
                   <button
                     onClick={handleVoiceDispatch}
                     disabled={voiceLoading}
@@ -1225,6 +1300,15 @@ export default function App() {
                   >
                     <PhoneCall className={`w-4 h-4 ${voiceLoading ? 'animate-bounce' : ''}`} />
                     <span>{voiceLoading ? 'Dispatching Call...' : 'Dispatch Automated Voice Call'}</span>
+                  </button>
+
+                  <button
+                    onClick={handlePlayRegionalAudio}
+                    className="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg border border-white/20 text-xs font-bold uppercase tracking-wider cursor-pointer transition-all flex items-center gap-2"
+                    title="Synthesize and play voice alert directly in browser via Web Speech API"
+                  >
+                    <Volume2 className="w-4 h-4 text-emerald-400" />
+                    <span>🔊 In-Browser Audio Preview ({currentPlot.language_name})</span>
                   </button>
                 </div>
 
@@ -1442,6 +1526,21 @@ export default function App() {
           </div>
         </div>
       </section>
+
+      {/* 1-CLICK GUIDED HACKATHON DEMO OVERLAY DOCK */}
+      <GuidedDemo
+        isOpen={isDemoOpen}
+        onClose={() => setIsDemoOpen(false)}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        selectedPlotId={selectedPlotId}
+        setSelectedPlotId={setSelectedPlotId}
+        refreshAllData={refreshAllData}
+        plots={plots}
+        claims={claims}
+        basisRisk={basisRisk}
+        passport={passport}
+      />
 
     </div>
   );
