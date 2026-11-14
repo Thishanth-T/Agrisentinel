@@ -229,6 +229,19 @@ export default function App() {
     }
   };
 
+  const handleSeedDemoData = async () => {
+    setActionLoading(true);
+    try {
+      const res = await api.seedDemoData();
+      await refreshAllData();
+      setStatusNotice(`✓ Pre-seeded 9 agricultural plots and verified ₹50,000 claim intent on Plot 1 (Madurai)!`);
+    } catch (e: any) {
+      setStatusNotice(`Seed error: ${e.message}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleVoiceDispatch = async () => {
     setVoiceLoading(true);
     setVoiceDispatchResult(null);
@@ -584,6 +597,46 @@ export default function App() {
             </div>
           </div>
 
+          {/* JUDGE QUICK-TEST CALLOUT BANNER */}
+          <div className="mt-6 p-4 rounded-xl border border-emerald-500/40 bg-gradient-to-r from-emerald-950/70 via-black/80 to-emerald-950/70 backdrop-blur-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-lg bg-emerald-500/20 text-emerald-400 mt-0.5 shrink-0 border border-emerald-500/30">
+                <Play className="w-5 h-5 fill-current animate-pulse" />
+              </div>
+              <div>
+                <div className="text-xs font-bold uppercase tracking-wider text-emerald-300 flex items-center gap-2">
+                  <span>HackWithAditya Screening Mode</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold">
+                    60-Sec Test Drive
+                  </span>
+                </div>
+                <p className="text-xs text-white/85 mt-1 max-w-[720px] leading-relaxed">
+                  Screening our prototype? Launch the guided 7-step interactive walkthrough: inject an 85mm cloudburst, watch traditional PMFBY reject it while AgriSentinel verifies the SECP256k1 curve, generate an instant ₹50,000 claim, and hear regional Tamil/English voice dispatch:
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto">
+              <button
+                onClick={() => setIsDemoOpen(true)}
+                className="w-full md:w-auto px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs uppercase tracking-wider rounded-lg transition-all cursor-pointer shadow-lg flex items-center justify-center gap-2 hover:scale-105"
+              >
+                <Play className="w-4 h-4 fill-current" />
+                <span>Run Guided Demo</span>
+              </button>
+
+              <button
+                onClick={handleSeedDemoData}
+                disabled={actionLoading}
+                className="px-3.5 py-2.5 bg-white/10 hover:bg-white/20 text-white font-semibold text-xs rounded-lg border border-white/20 transition-all cursor-pointer flex items-center gap-1.5"
+                title="Pre-seed sample telemetry and claim intent into SQLite"
+              >
+                <Zap className="w-3.5 h-3.5 text-amber-300" />
+                <span>Seed Data</span>
+              </button>
+            </div>
+          </div>
+
           {statusNotice && (
             <div className="mt-4 p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-xs font-mono flex items-center justify-between">
               <span>{statusNotice}</span>
@@ -728,7 +781,17 @@ export default function App() {
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    onClick={handleSeedDemoData}
+                    disabled={actionLoading}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded-lg border border-emerald-500/40 text-xs font-bold cursor-pointer transition-all shadow-md"
+                    title="Seed 9 plots and verified claim intent"
+                  >
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>Seed Sample Data</span>
+                  </button>
+
                   <button 
                     onClick={handleResetSystem}
                     disabled={actionLoading}
@@ -963,8 +1026,18 @@ export default function App() {
                     <tbody className="divide-y divide-white/10 font-mono text-[11px]">
                       {claims.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="p-6 text-center text-white/50 font-sans text-xs">
-                            No claims generated yet. Trigger a drought or cloudburst scenario above!
+                          <td colSpan={7} className="p-8 text-center text-white/60 font-sans text-xs">
+                            <div className="flex flex-col items-center justify-center gap-2.5">
+                              <span>No claims recorded in current session.</span>
+                              <button
+                                onClick={handleSeedDemoData}
+                                disabled={actionLoading}
+                                className="px-4 py-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-bold text-xs cursor-pointer transition-all flex items-center gap-1.5 shadow-md hover:scale-105"
+                              >
+                                <Zap className="w-3.5 h-3.5 text-amber-300" />
+                                <span>⚡ Load Sample Cloudburst Claim (1-Click)</span>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ) : (

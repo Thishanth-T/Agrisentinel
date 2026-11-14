@@ -35,11 +35,29 @@ To terminate running services:
 
 ---
 
+## ⚡ The 60-Second Judge Test Drive ("Click X → See Y")
+
+Evaluating this repo for **HackWithAditya 2026** screening? Here is the exact 60-second test drive:
+
+| Step | What You Do | What You See Under the Hood |
+|---|---|---|
+| **1. Boot Platform** | Double-click `start_agrisentinel.bat` (Windows) or `./start_agrisentinel.sh` (Linux/Mac). | Browser opens `http://localhost:3000` (React Web UI) and `http://localhost:8000/docs` (FastAPI Swagger). |
+| **2. One-Click Guided Demo** | Click the glowing **"▶ Run 3-Min Demo"** button on the header or top banner. | Floating dock appears with 7 milestones, live progress bar, auto-advancing timer, and live cryptographic console. |
+| **3. Trigger Localized Cloudburst** | Click **"Trigger 85mm Cloudburst on Madurai Field"** (Step 2). | Rainfall spikes to 85.0mm (crossing the 70.0mm contractual flood threshold). |
+| **4. Witness Basis Risk Elimination** | Auto-switches to **Basis Risk** (Step 3). | Traditional IMD district station 15.2 km away records **0.0mm [CLAIM REJECTED]**, while AgriSentinel records **85.0mm [BREACH DETECTED]**. |
+| **5. Cryptographic Anti-Fraud Check** | Review **SECP256k1 Security** (Step 4). | ECDSA signature verified, replay nonce cached, OpenWeather cross-check prevents synthetic bucket fraud. |
+| **6. Autonomous Claim Generation** | View **Claims Ledger** (Step 5). | Autonomous **₹50,000 claim intent** record persisted to SQLite with zero manual paperwork. |
+| **7. Regional Voice Alert** | Click **"🔊 In-Browser Voice Preview"** (Step 6). | Speaks out loud through laptop speakers in native **Tamil** (`ta-IN`) or English via Web Speech API. |
+| **8. Immutable Audit Chain** | Check **Evidence Passport** (Step 7). | SHA-256 block appended (`prev_hash` &rarr; `current_hash`) with 1-click JSON export. |
+
+---
+
 ## 🎬 Guided 3-Minute Hackathon Demo Mode
 AgriSentinel includes an integrated, interactive **7-Step Hackathon Guided Walkthrough** accessible directly on `http://localhost:3000`:
 - Click **"▶ Run 3-Min Demo"** in the top navigation bar or the hero showcase card.
 - Steps through: *Pan-India Baseline &rarr; 85mm Cloudburst Influx &rarr; Basis Risk Paradox &rarr; SECP256k1 Curve Verification &rarr; Instant ₹50,000 Parametric Claim &rarr; 2G Regional Voice Dispatch (in-browser Tamil/English TTS) &rarr; Immutable SHA-256 Hash-Chain Audit*.
 - Each step triggers live backend API calls and displays real-time cryptographic logs and SQLite block transactions.
+- Pre-seeded sample telemetry and claim records ensure evaluators never stare at empty screens.
 
 ---
 

@@ -15,8 +15,10 @@ if ! command -v python3 &> /dev/null; then
 fi
 
 echo "[2/4] Installing Python backend dependencies..."
-python3 -m pip install --upgrade pip
-python3 -m pip install -r "${SCRIPT_DIR}/requirements.txt"
+PYTHON_BIN="python3"
+command -v python3 &> /dev/null || PYTHON_BIN="python"
+$PYTHON_BIN -m pip install --upgrade pip
+$PYTHON_BIN -m pip install -r "${SCRIPT_DIR}/requirements.txt"
 
 echo "[3/4] Initializing environment config..."
 if [ ! -f "${SCRIPT_DIR}/.env" ] && [ -f "${SCRIPT_DIR}/.env.example" ]; then

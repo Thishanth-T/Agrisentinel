@@ -18,7 +18,9 @@ for port in 8000 3000 8501; do
 done
 
 echo "[1/3] Starting FastAPI Backend on port 8000..."
-(cd "${BACKEND_DIR}" && python3 -m uvicorn backend:app --host 127.0.0.1 --port 8000 --reload) &
+PYTHON_BIN="python3"
+command -v python3 &> /dev/null || PYTHON_BIN="python"
+(cd "${BACKEND_DIR}" && $PYTHON_BIN -m uvicorn backend:app --host 127.0.0.1 --port 8000 --reload) &
 BACKEND_PID=$!
 
 sleep 2

@@ -268,5 +268,12 @@ export const api = {
       method: 'POST',
     });
     return res.json();
+  },
+
+  async seedDemoData() {
+    const res = await fetch(`${API_BASE}/api/demo/seed`, {
+      method: 'POST',
+    });
+    return res.json();
   }
 };

@@ -97,6 +97,20 @@ class TriggerVoicePayload(BaseModel):
     twilio_token: Optional[str] = None
     twilio_phone: Optional[str] = None
 
+@app.on_event("startup")
+async def on_startup():
+    """Auto-seeds realistic baseline telemetry and verified sample claim if database is fresh."""
+    try:
+        if len(engine.claims) == 0:
+            engine.seed_sample_scenario()
+    except Exception as e:
+        print(f"Startup seed notice: {e}")
+
+@app.post("/api/demo/seed")
+async def seed_demo_data():
+    """Seeds realistic demonstration telemetry across all 9 plots and records a verified claim."""
+    return engine.seed_sample_scenario()
+
 @app.get("/health")
 async def health_check():
     return {

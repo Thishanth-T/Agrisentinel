@@ -1,0 +1,13 @@
+{
+  "name": "agrisentinel",
+  "version": "2.1.0",
+  "private": true,
+  "description": "Autonomous Parametric Crop Insurance & Hardware-Signed IoT Telemetry Platform",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "start": "npm --prefix frontend run dev",
+    "test": "pytest",
+    "lint": "npm --prefix frontend run lint"
+  }
+}
