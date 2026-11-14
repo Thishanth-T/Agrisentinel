@@ -302,10 +302,24 @@ export const GuidedDemo: React.FC<GuidedDemoProps> = ({
 
   const step = DEMO_STEPS[currentStepIdx];
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const addConsoleLog = (msg: string) => {
     const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false });
     setConsoleLogs(prev => [`[${timestamp}] ${msg}`, ...prev.slice(0, 49)]);
+  };
+
+  // Stop any active playing audio or speech synthesis
+  const stopActiveAudio = () => {
+    if (activeAudioRef.current) {
+      activeAudioRef.current.pause();
+      activeAudioRef.current.currentTime = 0;
+      activeAudioRef.current = null;
+    }
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setIsSpeaking(false);
   };
 
   // Play subtle futuristic chime via Web Audio API
@@ -330,21 +344,20 @@ export const GuidedDemo: React.FC<GuidedDemoProps> = ({
     }
   };
 
-  // Web Speech API Voice synthesis helper with natural voice selection
-  const speakCurrentStepText = (langChoice = selectedLanguage) => {
-    if (isAudioMuted || typeof window === 'undefined' || !('speechSynthesis' in window)) {
+  // Fallback speech synthesis helper
+  const speakViaSpeechSynthesis = (langChoice: string, currStep: DemoStep) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
       setIsSpeaking(false);
       return;
     }
-
     try {
       window.speechSynthesis.cancel();
-      let textToSpeak = step.speechText;
+      let textToSpeak = currStep.speechText;
       let targetLocale = 'en-US';
 
-      if (langChoice !== 'en' && step.translations && step.translations[langChoice]) {
-        textToSpeak = step.translations[langChoice].text;
-        targetLocale = step.translations[langChoice].lang;
+      if (langChoice !== 'en' && currStep.translations && currStep.translations[langChoice]) {
+        textToSpeak = currStep.translations[langChoice].text;
+        targetLocale = currStep.translations[langChoice].lang;
       }
 
       const utterance = new SpeechSynthesisUtterance(textToSpeak);
@@ -352,12 +365,11 @@ export const GuidedDemo: React.FC<GuidedDemoProps> = ({
       utterance.rate = langChoice === 'en' ? 0.98 : 0.92;
       utterance.pitch = 1.0;
 
-      // Pick the best natural sounding voice
       const voices = window.speechSynthesis.getVoices();
       if (voices && voices.length > 0) {
-        let bestVoice = voices.find(v => v.lang === targetLocale && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Microsoft') || v.name.includes('Premium')));
+        let bestVoice = voices.find(v => v.lang.toLowerCase() === targetLocale.toLowerCase() && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Microsoft') || v.name.includes('Premium')));
         if (!bestVoice) {
-          bestVoice = voices.find(v => v.lang.startsWith(targetLocale.split('-')[0]));
+          bestVoice = voices.find(v => v.lang.toLowerCase().startsWith(targetLocale.split('-')[0].toLowerCase()));
         }
         if (bestVoice) {
           utterance.voice = bestVoice;
@@ -374,6 +386,62 @@ export const GuidedDemo: React.FC<GuidedDemoProps> = ({
       setIsSpeaking(false);
     }
   };
+
+  // High-reliability multi-tiered audio playback
+  const playStepAudio = (langChoice = selectedLanguage) => {
+    stopActiveAudio();
+    if (isAudioMuted || typeof window === 'undefined') {
+      setIsSpeaking(false);
+      return;
+    }
+
+    const currStep = DEMO_STEPS[currentStepIdx];
+
+    // Priority 1 for Regional Languages (ta, te): Play authentic pre-rendered static MP3
+    if (langChoice === 'ta' || langChoice === 'te') {
+      const audioPath = `/audio/${langChoice}_${currStep.id}.mp3`;
+      const audio = new Audio(audioPath);
+      activeAudioRef.current = audio;
+
+      audio.onplay = () => setIsSpeaking(true);
+      audio.onended = () => setIsSpeaking(false);
+      audio.onerror = () => {
+        // Priority 2: Stream from backend dynamic TTS endpoint
+        const text = currStep.translations?.[langChoice]?.text || currStep.speechText;
+        const dynamicUrl = api.getTTSUrl(text, langChoice);
+        const dynamicAudio = new Audio(dynamicUrl);
+        activeAudioRef.current = dynamicAudio;
+
+        dynamicAudio.onplay = () => setIsSpeaking(true);
+        dynamicAudio.onended = () => setIsSpeaking(false);
+        dynamicAudio.onerror = () => {
+          // Priority 3: Fallback to Web Speech API
+          speakViaSpeechSynthesis(langChoice, currStep);
+        };
+
+        dynamicAudio.play().catch(() => {
+          speakViaSpeechSynthesis(langChoice, currStep);
+        });
+      };
+
+      audio.play().catch(() => {
+        // If autoplay policy blocks static file, try backend stream or speech
+        const text = currStep.translations?.[langChoice]?.text || currStep.speechText;
+        const dynamicAudio = new Audio(api.getTTSUrl(text, langChoice));
+        activeAudioRef.current = dynamicAudio;
+        dynamicAudio.onplay = () => setIsSpeaking(true);
+        dynamicAudio.onended = () => setIsSpeaking(false);
+        dynamicAudio.play().catch(() => {
+          speakViaSpeechSynthesis(langChoice, currStep);
+        });
+      });
+      return;
+    }
+
+    // For English: High-fidelity Web Speech API
+    speakViaSpeechSynthesis(langChoice, currStep);
+  };
+
 
   // Manage DOM Spotlight Highlights
   const applySpotlightHighlight = (targetId: string) => {
@@ -421,7 +489,7 @@ export const GuidedDemo: React.FC<GuidedDemoProps> = ({
     addConsoleLog(`NAV: Milestone ${current.stepIndex}/7 [${current.title}] -> Focused: #${current.targetElementId}`);
 
     // Voice narration
-    speakCurrentStepText(selectedLanguage);
+    playStepAudio(selectedLanguage);
 
     // Auto-run action for certain steps to create a seamless experience
     if (current.id === 'cloudburst') {
@@ -434,9 +502,7 @@ export const GuidedDemo: React.FC<GuidedDemoProps> = ({
   // Clean up when unmounting or closing
   useEffect(() => {
     return () => {
-      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-      }
+      stopActiveAudio();
       if (typeof document !== 'undefined') {
         const prev = document.querySelectorAll('.demo-spotlight-active');
         prev.forEach(el => el.classList.remove('demo-spotlight-active'));
@@ -518,12 +584,7 @@ export const GuidedDemo: React.FC<GuidedDemoProps> = ({
         }
 
         // Also speak regional audio through speakers
-        if (selectedLanguage === 'en') {
-          // Speak Tamil or Telugu regional preview
-          speakCurrentStepText('ta');
-        } else {
-          speakCurrentStepText(selectedLanguage);
-        }
+        playStepAudio(selectedLanguage === 'en' ? 'ta' : selectedLanguage);
       } else if (curr.id === 'audit_passport') {
         const auditRes = await api.getAudit();
         await refreshAllData();
@@ -556,9 +617,7 @@ export const GuidedDemo: React.FC<GuidedDemoProps> = ({
   };
 
   const handleExit = () => {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-    }
+    stopActiveAudio();
     if (typeof document !== 'undefined') {
       const prev = document.querySelectorAll('.demo-spotlight-active');
       prev.forEach(el => el.classList.remove('demo-spotlight-active'));
@@ -568,7 +627,7 @@ export const GuidedDemo: React.FC<GuidedDemoProps> = ({
 
   const handleLanguageChange = (lang: 'en' | 'te' | 'ta' | 'hi') => {
     setSelectedLanguage(lang);
-    speakCurrentStepText(lang);
+    playStepAudio(lang);
   };
 
   if (!isOpen) return null;
@@ -683,11 +742,10 @@ export const GuidedDemo: React.FC<GuidedDemoProps> = ({
                 onClick={() => {
                   const nextMute = !isAudioMuted;
                   setIsAudioMuted(nextMute);
-                  if (nextMute && typeof window !== 'undefined' && 'speechSynthesis' in window) {
-                    window.speechSynthesis.cancel();
-                    setIsSpeaking(false);
-                  } else if (!nextMute) {
-                    speakCurrentStepText(selectedLanguage);
+                  if (nextMute) {
+                    stopActiveAudio();
+                  } else {
+                    playStepAudio(selectedLanguage);
                   }
                 }}
                 className={`p-1.5 rounded-lg border text-xs transition-all cursor-pointer ${

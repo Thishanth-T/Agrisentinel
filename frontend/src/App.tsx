@@ -259,24 +259,43 @@ export default function App() {
   };
 
   const handlePlayRegionalAudio = () => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
     try {
-      window.speechSynthesis.cancel();
-      let text = `Alert for ${currentPlot.farmer_name}. Parametric crop breach detected in ${currentPlot.district}, ${currentPlot.state}. Policy claim intent recorded for rupees ${currentPlot.sum_insured_inr?.toLocaleString('en-IN')}.`;
-      let lang = 'en-US';
-      if (currentPlot.language_code?.startsWith('ta')) {
-        text = `வணக்கம் ${currentPlot.farmer_name} அவர்களே, உங்கள் ${currentPlot.district} பண்ணையில் தீவிர மழை பதிவாகியுள்ளது. பயிர் காப்பீட்டு இழப்பீடு ரூபாய் ${currentPlot.sum_insured_inr?.toLocaleString('en-IN')} அங்கீகரிக்கப்பட்டுள்ளது.`;
-        lang = 'ta-IN';
-      } else if (currentPlot.language_code?.startsWith('hi')) {
-        text = `नमस्ते ${currentPlot.farmer_name} जी, आपके ${currentPlot.district} खेत में अत्यधिक मौसमी परिवर्तन दर्ज किया गया है। फसल बीमा दावा राशि ${currentPlot.sum_insured_inr?.toLocaleString('en-IN')} रुपये स्वीकृत की गई है।`;
-        lang = 'hi-IN';
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
       }
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = lang;
-      utterance.rate = 0.95;
-      window.speechSynthesis.speak(utterance);
+
+      // Determine regional audio source & language
+      let audioSrc = '/audio/ta_preview.mp3';
+      let lang = 'ta';
+      let text = `வணக்கம் ${currentPlot.farmer_name} அவர்களே, உங்கள் ${currentPlot.district} பண்ணையில் தீவிர மழை பதிவாகியுள்ளது. பயிர் காப்பீட்டு இழப்பீடு ரூபாய் ${currentPlot.sum_insured_inr?.toLocaleString('en-IN')} அங்கீகரிக்கப்பட்டுள்ளது.`;
+
+      if (currentPlot.language_code?.startsWith('te') || currentPlot.state === 'Andhra Pradesh' || currentPlot.district === 'Kakinada') {
+        audioSrc = '/audio/te_preview.mp3';
+        lang = 'te';
+        text = `నమస్కారం! మీ పొలంలో ఎనభై ఐదు మిల్లీమీటర్ల భారీ వర్షపాతం నమోదైంది. యాభై వేల రూపాయల పంట బీమా క్లెయిమ్ విజయవంతంగా నమోదు చేయబడింది.`;
+      } else if (currentPlot.language_code?.startsWith('hi')) {
+        audioSrc = '/audio/hi_preview.mp3';
+        lang = 'hi';
+        text = `नमस्ते ${currentPlot.farmer_name} जी, आपके खेत में अत्यधिक मौसमी परिवर्तन दर्ज किया गया है। पचास हज़ार रुपये का फसल बीमा दावा स्वीकृत किया गया है।`;
+      }
+
+      // 1. First priority: Play pre-rendered authentic MP3 audio
+      const audio = new Audio(audioSrc);
+      audio.play().catch(() => {
+        // 2. Second priority: Stream from backend gTTS endpoint
+        const fallbackAudio = new Audio(api.getTTSUrl(text, lang));
+        fallbackAudio.play().catch(() => {
+          // 3. Third priority: Web Speech API
+          if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = currentPlot.language_code || 'en-IN';
+            utterance.rate = 0.95;
+            window.speechSynthesis.speak(utterance);
+          }
+        });
+      });
     } catch (e) {
-      console.warn('Speech synthesis error:', e);
+      console.warn('Audio play error:', e);
     }
   };
 

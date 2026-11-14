@@ -60,6 +60,41 @@ app.add_middleware(
 
 # Safety cooldown state for rate-limiting destructive/cost-bearing actions
 _last_voice_call_time: float = 0.0
+_TTS_CACHE: Dict[str, bytes] = {}
+
+@app.get("/api/voice/tts")
+async def get_voice_tts(text: str, lang: str = "ta"):
+    """
+    Synthesizes fluent regional language audio using Google Text-to-Speech (gTTS)
+    for seamless Tamil (ta), Telugu (te), Hindi (hi), and English (en) playback in browsers
+    without requiring OS-specific speech packs.
+    """
+    clean_text = text.strip()
+    if not clean_text:
+        raise HTTPException(status_code=400, detail="Text parameter is required")
+
+    norm_lang = lang.split("-")[0].lower()
+    if norm_lang not in ["ta", "te", "hi", "en", "kn", "ml", "mr", "gu", "bn"]:
+        norm_lang = "en"
+
+    cache_key = f"{norm_lang}:{clean_text}"
+    if cache_key in _TTS_CACHE:
+        return Response(content=_TTS_CACHE[cache_key], media_type="audio/mpeg")
+
+    try:
+        from gtts import gTTS
+        import io
+        fp = io.BytesIO()
+        tts = gTTS(text=clean_text, lang=norm_lang, slow=False)
+        tts.write_to_fp(fp)
+        fp.seek(0)
+        audio_bytes = fp.read()
+        _TTS_CACHE[cache_key] = audio_bytes
+        return Response(content=audio_bytes, media_type="audio/mpeg")
+    except Exception as e:
+        logger.error(f"TTS generation error for lang {norm_lang}: {e}")
+        raise HTTPException(status_code=500, detail=f"TTS synthesis error: {str(e)}")
+
 _last_reset_time: float = 0.0
 
 class TelemetryData(BaseModel):

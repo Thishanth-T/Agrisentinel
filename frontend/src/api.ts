@@ -275,5 +275,9 @@ export const api = {
       method: 'POST',
     });
     return res.json();
+  },
+
+  getTTSUrl(text: string, lang = 'ta'): string {
+    return `${API_BASE}/api/voice/tts?text=${encodeURIComponent(text)}&lang=${lang}`;
   }
 };
