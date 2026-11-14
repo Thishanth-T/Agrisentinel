@@ -4,7 +4,7 @@ interface ScrollCanvasProps {
   frameCount?: number;
 }
 
-export const ScrollCanvas: React.FC<ScrollCanvasProps> = ({ frameCount = 285 }) => {
+export const ScrollCanvas: React.FC<ScrollCanvasProps> = ({ frameCount = 270 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {

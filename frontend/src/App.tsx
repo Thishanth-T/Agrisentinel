@@ -323,7 +323,7 @@ export default function App() {
     <div className="min-h-screen bg-transparent text-white flex flex-col items-center justify-start overflow-x-hidden relative selection:bg-white selection:text-black font-sans">
       
       {/* BACKGROUND SMOOTH SCROLL FRAME ANIMATION */}
-      <ScrollCanvas frameCount={285} />
+      <ScrollCanvas frameCount={270} />
 
       {/* SECTION 1: ARCHITECTURAL HERO BANNER */}
       <section 
@@ -1537,7 +1537,7 @@ export default function App() {
                   {activeTech === 'comms' && 'SIM800L 2G/GSM transceiver for SMS & automated voice dispatch, with fallback LoRaWAN SX1276 packet radio for deep rural areas devoid of cellular coverage.'}
                   {activeTech === 'sqlite' && 'Transactional storage enforcing foreign key constraints, unique packet digests, and SHA-256 hash-chain verification ensuring zero retroactive tampering.'}
                   {activeTech === 'fastapi' && 'Asynchronous Python web service with Pydantic contract validation, OpenWeatherMap corroboration, and automated claim intent generation.'}
-                  {activeTech === 'react' && 'Responsive web frontend rendering transparent glassmorphism directly over 285 smoothly interpolated background frames with retina display scaling.'}
+                  {activeTech === 'react' && 'Responsive web frontend rendering transparent glassmorphism directly over 270 smoothly interpolated background frames with retina display scaling.'}
                 </p>
               </div>
             </div>
