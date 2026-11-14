@@ -195,6 +195,7 @@ class TestAgriSentinelSuite(unittest.TestCase):
     def test_10_parametric_breach_claim_intent(self, mock_get):
         mock_get.side_effect = Exception("Offline test")
         eng = ParametricInsuranceEngine()
+        eng.reset_system()
         telemetry = {
             "plot_id": "plot_1",
             "timestamp": time.time(),

@@ -6,9 +6,18 @@ meteorological cross-examination, parametric claims evaluation, and voice alerts
 """
 
 import os
+import sys
 import re
 import time
 from typing import Dict, Any, Optional
+
+# Ensure both root and Agrisentinel package directories are in sys.path
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+_AGRI_DIR = os.path.join(_BASE_DIR, "Agrisentinel")
+if os.path.isdir(_AGRI_DIR) and _AGRI_DIR not in sys.path:
+    sys.path.insert(0, _AGRI_DIR)
+if _BASE_DIR not in sys.path:
+    sys.path.insert(0, _BASE_DIR)
 
 import config  # Loads .env safely at startup
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Response, Request

@@ -10,8 +10,14 @@ Comprehensive acceptance criteria testing covering:
 6. Telecom & Regional Voice TwiML Generation
 """
 
+import os
+import sys
 import time
 import pytest
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'Agrisentinel')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from farm_registry import (
     FARM_PROFILES,
     DEVICE_REGISTRY,

@@ -35,23 +35,52 @@ To terminate running services:
 
 ---
 
+## 🎬 Guided 3-Minute Hackathon Demo Mode
+AgriSentinel includes an integrated, interactive **7-Step Hackathon Guided Walkthrough** accessible directly on `http://localhost:3000`:
+- Click **"▶ Run 3-Min Demo"** in the top navigation bar or the hero showcase card.
+- Steps through: *Pan-India Baseline &rarr; 85mm Cloudburst Influx &rarr; Basis Risk Paradox &rarr; SECP256k1 Curve Verification &rarr; Instant ₹50,000 Parametric Claim &rarr; 2G Regional Voice Dispatch (in-browser Tamil/English TTS) &rarr; Immutable SHA-256 Hash-Chain Audit*.
+- Each step triggers live backend API calls and displays real-time cryptographic logs and SQLite block transactions.
+
+---
+
 ## 🧪 Running the Automated Verification Suite
 
-AgriSentinel includes 49 automated test cases covering cryptographic integrity, replay defense, hardware fault injection, and spatial reconciliation:
+AgriSentinel includes 49 automated test cases covering cryptographic integrity, replay defense, hardware fault injection, and spatial reconciliation. With root `pytest.ini`, tests run out of the box with zero configuration:
 
 ```bash
-# Set PYTHONPATH to include backend modules
-# Windows PowerShell:
-$env:PYTHONPATH="Agrisentinel;."
-python -m pytest tests/test_comprehensive_validation.py
-python -m pytest tests/test_agrisentinel.py
-python tests/run_tests.py
+# 1. Run all 34 acceptance and validation gates via pytest:
+pytest
 
-# macOS / Linux:
-export PYTHONPATH="Agrisentinel:."
-pytest tests/test_comprehensive_validation.py
-pytest tests/test_agrisentinel.py
-python3 tests/run_tests.py
+# 2. Run the 15 zero-dependency offline integration tests:
+python tests/run_tests.py
+```
+
+---
+
+## 🏗️ System Architecture & Data Flow
+
+```mermaid
+flowchart TD
+    subgraph Edge ["On-Plot Edge Tier (Physical Specification & Physics Sim)"]
+        Sensors["Transducer Array (Soil Moisture, Temp, Rain)"] --> Micro["ESP32 Dual-Core Controller"]
+        Micro --> Secp["ECDSA SECP256k1 Hardware Signing"]
+        Secp --> FlashQueue["Offline Flash Buffer (2G/GSM Reconnection)"]
+    end
+
+    subgraph Backend ["AgriSentinel Core Ingestion (FastAPI & SQLite WAL)"]
+        FlashQueue --> Ingest["POST /api/telemetry Ingestion Gateway"]
+        Ingest --> ReplayDefense["Persistent Monotonic Replay Defense"]
+        ReplayDefense --> TrustEngine["Adaptive Device Trust Engine (Drift/Stuck/Spike Detection)"]
+        TrustEngine --> SpatialEngine["Spatial-Temporal Evidence Reconciliation (Neighbor Farms & OpenWeather)"]
+        SpatialEngine --> ParametricEngine["Parametric Policy State Machine (Contract Breach Check)"]
+        ParametricEngine --> AuditChain["Immutable SQLite SHA-256 Audit Ledger (Farm Passport)"]
+    end
+
+    subgraph Action ["Settlement & Farmer Inclusion Tier"]
+        ParametricEngine --> ClaimRecord["Autonomous Claim Intent Generation (₹50,000 Benefit)"]
+        ClaimRecord --> VoiceAlert["2G Telecom Voice Dispatch (Twilio TwiML / Tamil & Hindi TTS)"]
+        AuditChain --> WebUI["React 19 Interactive Cockpit & Guided Demo (:3000)"]
+    end
 ```
 
 ---
@@ -64,6 +93,14 @@ python3 tests/run_tests.py
 - **Immutable Audit Trail (`database.py`)**: Transactional SQLite database with SHA-256 hash-linked blocks (`audit_log` table) guaranteeing tamper-evident chain of custody.
 - **Regional Telecom Voice Dispatch (`telecom_service.py`)**: Generates localized TwiML voice XML in Tamil, Hindi, and regional languages with DTMF keypad confirmation without requiring a smartphone or internet connection.
 - **Agronomic Advisory Service (`advisor_service.py`)**: Ground-truth ICAR/KVK-calibrated crop recommendations with explicit pesticide spray cautions, enhanced via Groq LLaMA-3.3-70B with offline deterministic fallback.
+
+---
+
+## 🤖 AI Tool Disclosure (HackWithAditya Rule Compliance)
+
+In compliance with **HackWithAditya 2026 Contest Rule 5 (AI Disclosure)**:
+- **AI Tools Utilized**: Anthropic Claude & Google Gemini (via Antigravity IDE) were utilized as assistive coding, debugging, documentation, and frontend styling copilots.
+- **Human Authorship & Core Engineering**: All core architectural decisions, cryptographic protocols (SECP256k1 curve enforcement), spatial-temporal reconciliation algorithms, parametric policy state machines, OpenSCAD CAD parametric modeling, and Godot 4 simulation logic were designed, implemented, and verified by the team (`saileshmv05` & `Thishanth T`).
 
 ---
 
