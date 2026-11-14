@@ -665,7 +665,7 @@ export default function App() {
               </div>
 
               {/* Plot Selector */}
-              <div className="flex flex-wrap gap-2.5 mb-8">
+              <div id="demo-target-plots" className="demo-spotlight-target flex flex-wrap gap-2.5 mb-8">
                 {plots.map((plot) => (
                   <button
                     key={plot.plot_id}
@@ -684,7 +684,7 @@ export default function App() {
               </div>
 
               {/* Sensor Metric Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-8">
+              <div id="demo-target-metrics" className="demo-spotlight-target grid grid-cols-1 sm:grid-cols-4 gap-4 mb-8">
                 <div className="border border-white/20 rounded-xl p-5 bg-white/5 backdrop-blur-sm">
                   <div className="flex items-center gap-2 text-white/70 text-xs mb-2">
                     <Droplets className="w-4 h-4 text-white" />
@@ -739,7 +739,7 @@ export default function App() {
               </div>
 
               {/* SECP256k1 Security Proof Panel */}
-              <div className="border border-white/25 rounded-xl p-5 bg-black/40 backdrop-blur-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div id="demo-target-crypto" className="demo-spotlight-target border border-white/25 rounded-xl p-5 bg-black/40 backdrop-blur-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-400">
@@ -869,7 +869,7 @@ export default function App() {
                   </div>
 
                   {/* Scenario Execution Grid */}
-                  <div className="pt-4 border-t border-white/10 space-y-3">
+                  <div id="demo-target-scenarios" className="demo-spotlight-target pt-4 border-t border-white/10 space-y-3">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-white/70 font-semibold uppercase">2. Environmental Event Scenarios</span>
                       <span className="text-[10px] text-white/50 font-mono">Intensity: {scenarioIntensity.toFixed(1)}x</span>
@@ -995,7 +995,7 @@ export default function App() {
               </div>
 
               {/* Claims Ledger */}
-              <div className="border border-white/20 rounded-xl overflow-hidden bg-black/40 backdrop-blur-md">
+              <div id="demo-target-claims" className="demo-spotlight-target border border-white/20 rounded-xl overflow-hidden bg-black/40 backdrop-blur-md">
                 <div className="p-4 border-b border-white/15 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-xs uppercase font-bold tracking-wider text-white">
@@ -1079,7 +1079,7 @@ export default function App() {
               </div>
 
               {basisRisk ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div id="demo-target-basis-risk" className="demo-spotlight-target grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Traditional Area Station */}
                   <div className="border border-rose-500/30 rounded-xl p-6 bg-rose-950/20 backdrop-blur-md space-y-4">
                     <div className="flex items-center justify-between">
@@ -1195,7 +1195,7 @@ export default function App() {
               {passport ? (
                 <div className="space-y-6">
                   {/* Passport Header Identity */}
-                  <div className="border border-white/20 rounded-xl p-6 bg-white/5 backdrop-blur-md grid grid-cols-1 sm:grid-cols-3 gap-6">
+                  <div id="demo-target-passport" className="demo-spotlight-target border border-white/20 rounded-xl p-6 bg-white/5 backdrop-blur-md grid grid-cols-1 sm:grid-cols-3 gap-6">
                     <div>
                       <span className="text-[10px] uppercase font-bold text-white/50 block">Plot Identity</span>
                       <div className="text-lg font-bold text-white">{passport.farm_profile.plot_id} &bull; {passport.farm_profile.farmer_name}</div>
@@ -1348,7 +1348,7 @@ export default function App() {
                 </p>
               </div>
 
-              <div className="border border-white/20 rounded-xl p-6 bg-black/40 backdrop-blur-md space-y-4">
+              <div id="demo-target-voice" className="demo-spotlight-target border border-white/20 rounded-xl p-6 bg-black/40 backdrop-blur-md space-y-4">
                 <div>
                   <label className="block text-xs uppercase tracking-wider text-white/70 mb-1.5 font-semibold">
                     Target Farmer Mobile Number (E.164 format)
