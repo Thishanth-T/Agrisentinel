@@ -397,8 +397,8 @@ export const GuidedDemo: React.FC<GuidedDemoProps> = ({
 
     const currStep = DEMO_STEPS[currentStepIdx];
 
-    // Priority 1 for Regional Languages (ta, te): Play authentic pre-rendered static MP3
-    if (langChoice === 'ta' || langChoice === 'te') {
+    // Priority 1 for Regional Languages (ta, te, hi): Play authentic pre-rendered static MP3
+    if (langChoice === 'ta' || langChoice === 'te' || langChoice === 'hi') {
       const audioPath = `/audio/${langChoice}_${currStep.id}.mp3`;
       const audio = new Audio(audioPath);
       activeAudioRef.current = audio;
